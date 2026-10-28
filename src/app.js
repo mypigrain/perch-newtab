@@ -491,15 +491,18 @@ function openCtx(e, id, zone, proj) {
   const t = findTile(id, zone, proj);
   if (!t) return;
   const cur = t.size === "w" ? "2×1" : t.size === "b" ? "2×2" : "1×1";
-  let html = `<button class="cit" data-act="cycle">改大小（当前 ${cur}）</button>`;
+  let html = `<button class="cit" data-act="rename">重命名</button>`;
+  html += `<button class="cit" data-act="editurl">修改网址</button>`;
+  html += `<div class="sep"></div>`;
+  html += `<button class="cit" data-act="cycle">改大小（当前 ${cur}）</button>`;
   if (zone !== "pinned") html += `<button class="cit" data-act="pinned">移到固定区</button>`;
   if (zone === "pinned") html += `<button class="cit" data-act="project">移到项目区</button>`;
   html += `<button class="cit" data-act="occasional">收进偶尔用</button>`;
-  html += `<button class="cit" data-act="del">删除</button>`;
+  html += `<div class="sep"></div><button class="cit danger" data-act="del">删除</button>`;
   el.innerHTML = html;
   el.classList.add("on");
   el.style.left = Math.min(e.clientX, innerWidth - 200) + "px";
-  el.style.top = Math.min(e.clientY, innerHeight - 240) + "px";
+  el.style.top = Math.min(e.clientY, innerHeight - 320) + "px";
   el.querySelectorAll(".cit").forEach(b => { b.onclick = () => doCtx(b.dataset.act); });
 }
 function closeCtx() { $("ctx").classList.remove("on"); ctxTarget = null; }
@@ -507,8 +510,13 @@ function closeCtx() { $("ctx").classList.remove("on"); ctxTarget = null; }
 function doCtx(act) {
   if (!ctxTarget) return;
   const c = ctxTarget;
+  closeCtx(); // 先收菜单再弹对话框，否则菜单会压在弹窗上
+
+  if (act === "rename") { renameTile(c.id, c.zone, c.proj); return; }
+  if (act === "editurl") { editTileUrl(c.id, c.zone, c.proj); return; }
+
   const t = findTile(c.id, c.zone, c.proj);
-  if (!t) { closeCtx(); return; }
+  if (!t) return;
   const L = findList(c.zone, c.proj);
   const i = L ? L.findIndex(x => x.id === t.id) : -1;
   if (act === "cycle") t.size = t.size === "s" ? "w" : t.size === "w" ? "b" : "s";
@@ -516,7 +524,28 @@ function doCtx(act) {
   else if (act === "pinned") { if (i >= 0) L.splice(i, 1); DB.pinned.push(t); }
   else if (act === "project") { if (i >= 0) L.splice(i, 1); (DB.projectTiles[DB.currentProject] ||= []).push(t); }
   else if (act === "occasional") { if (i >= 0) L.splice(i, 1); DB.occasional.push({ id: t.id, title: t.title, url: t.url, icon: t.icon, group: "新收起" }); }
-  save(); renderAll(); closeCtx();
+  save(); renderAll(true);
+}
+
+/* ---- 磁贴改名 / 改网址 ---- */
+async function renameTile(id, zone, proj) {
+  const t = findTile(id, zone, proj);
+  if (!t) return;
+  const name = await askText("重命名", t.title, { okText: "保存" });
+  if (!name || name === t.title) return;
+  t.title = name.slice(0, 60);
+  save(); renderAll(true);
+}
+
+async function editTileUrl(id, zone, proj) {
+  const t = findTile(id, zone, proj);
+  if (!t) return;
+  const input = await askText("修改网址", t.url, { okText: "保存" });
+  if (!input) return;
+  const url = /^https?:\/\//i.test(input) ? input : "https://" + input;
+  try { new URL(url); } catch { toast("网址格式不对"); return; }
+  t.url = url;
+  save(); renderAll(true);
 }
 
 /* ============================== 项目菜单 / 归档 ============================== */
@@ -809,6 +838,28 @@ function moveToGroup(id, group) {
   toast(`已移到「${group}」`);
 }
 
+async function renameOcc(id) {
+  const o = DB.occasional.find(x => x.id === id);
+  if (!o) return;
+  const name = await askText("重命名", o.title, { okText: "保存" });
+  if (!name || name === o.title) return;
+  o.title = name.slice(0, 60);
+  save();
+  renderAll(true);
+}
+
+async function editOccUrl(id) {
+  const o = DB.occasional.find(x => x.id === id);
+  if (!o) return;
+  const input = await askText("修改网址", o.url, { okText: "保存" });
+  if (!input) return;
+  const url = /^https?:\/\//i.test(input) ? input : "https://" + input;
+  try { new URL(url); } catch { toast("网址格式不对"); return; }
+  o.url = url;
+  save();
+  renderAll(true);
+}
+
 async function renameGroup(from) {
   const name = await askText("重命名分组", from);
   if (!name || name === from) return;
@@ -833,12 +884,23 @@ function openOccMenu(e, id) {
   const others = allGroups().filter(g => g !== item.group);
   const el = $("ctx");
   el.innerHTML =
+    `<button class="cit" data-occ-rename="1">重命名</button>` +
+    `<button class="cit" data-occ-url="1">修改网址</button>` +
+    `<div class="sep"></div>` +
     others.map(g => `<button class="cit" data-move="${esc(g)}">移到「${esc(g)}」</button>`).join("") +
     `<button class="cit" data-move="__new__">移到新分组…</button>` +
     `<div class="sep"></div><button class="cit danger" data-del="1">删除这一项</button>`;
   el.classList.add("on");
   el.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
-  el.style.top = Math.min(e.clientY, innerHeight - 250) + "px";
+  el.style.top = Math.min(e.clientY, innerHeight - 320) + "px";
+  el.querySelector("[data-occ-rename]").onclick = () => {
+    closeCtx();
+    renameOcc(id);
+  };
+  el.querySelector("[data-occ-url]").onclick = () => {
+    closeCtx();
+    editOccUrl(id);
+  };
   el.querySelectorAll("[data-move]").forEach(b => {
     b.onclick = async () => {
       let g = b.dataset.move;
