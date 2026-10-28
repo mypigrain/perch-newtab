@@ -6,7 +6,7 @@
  *   这个文件用经典 <script> 加载，在解析阶段同步执行，能在首帧之前就把极光画到
  *   兜底画布上，于是第一帧就已经是完整背景。
  *
- * 同时把画法挂到 window.LensAurora 上，供 app.js 交给 WebGL 渲染器当 artwork 复用。
+ * 同时把画法挂到 window.PerchAurora 上，供 app.js 交给 WebGL 渲染器当 artwork 复用。
  */
 (function () {
   "use strict";
@@ -94,7 +94,7 @@
     }
   }
 
-  window.LensAurora = { paint, blit, paintFallback };
+  window.PerchAurora = { paint, blit, paintFallback };
 
   // 解析阶段立刻画一次：保证首帧就有背景
   paintFallback();

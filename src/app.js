@@ -1,5 +1,5 @@
 /* ============================================================================
-   透镜新标签页 — 应用入口
+   栖 · Perch — 应用入口
    结构：图标 / 数据 / 渲染 / 交互 / 玻璃启动
    ========================================================================== */
 
@@ -22,7 +22,10 @@ const ICONS = {
 const icon = name => `<svg class="lg-icon" viewBox="0 0 24 24">${ICONS[name] || ICONS.link}</svg>`;
 
 /* ============================== 数据 ============================== */
-const KEY = "lens-newtab:v1";
+/* 存储键：0.7 之前叫 lens-newtab:v1，改名后换了键但保留读取旧键做迁移，
+   不让已经配好的布局因为改名丢掉。 */
+const KEY = "perch:v1";
+const LEGACY_KEY = "lens-newtab:v1";
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
@@ -43,7 +46,17 @@ if (!Array.isArray(DB.archived)) DB.archived = [];
 DB.occasional.forEach(o => { if (!o.group) o.group = "未分类"; });
 
 function load() {
-  try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  try {
+    let raw = localStorage.getItem(KEY);
+    if (!raw) {
+      raw = localStorage.getItem(LEGACY_KEY);
+      if (raw) {
+        localStorage.setItem(KEY, raw);
+        localStorage.removeItem(LEGACY_KEY);
+      }
+    }
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* 存不下也不影响使用 */ }
@@ -924,7 +937,8 @@ async function addProject() {
 }
 
 /* ============================== 布局导入 / 导出 ============================== */
-const FORMAT = "lens-newtab";
+const FORMAT = "perch";
+const LEGACY_FORMATS = new Set(["lens-newtab"]); // 0.7 前的导出文件仍可导入
 const FORMAT_VERSION = 1;
 let uidCounter = 0;
 const uid = prefix => `${prefix}${Date.now().toString(36)}${(++uidCounter).toString(36)}`;
@@ -1004,7 +1018,7 @@ function exportLayout() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `lens-newtab-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `perch-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1019,7 +1033,9 @@ function importLayout(file) {
     let next;
     try {
       const parsed = JSON.parse(String(reader.result));
-      if (parsed && parsed.format && parsed.format !== FORMAT) throw new Error("不是本扩展的布局文件");
+      if (parsed && parsed.format && parsed.format !== FORMAT && !LEGACY_FORMATS.has(parsed.format)) {
+        throw new Error("不是本扩展的布局文件");
+      }
       next = normalizeLayout(parsed);
     } catch (err) {
       toast(`导入失败：${err && err.message ? err.message : "无法解析"}`);
@@ -1113,8 +1129,8 @@ function bind() {
 /* ============================== 背景 ============================== */
 /* 极光画法在 src/aurora.js（经典脚本）：它在解析阶段就把背景画到兜底画布上，
    保证首帧不是空白，同时把画法暴露出来给 WebGL 渲染器当 artwork 复用。 */
-const aurora = window.LensAurora;
-if (!aurora) console.warn("[lens] aurora.js 没有加载，背景会退化成纯色");
+const aurora = window.PerchAurora;
+if (!aurora) console.warn("[perch] aurora.js 没有加载，背景会退化成纯色");
 const paintAurora = aurora ? aurora.paint : () => {};
 const paintFallback = aurora ? aurora.paintFallback : () => {};
 
@@ -1191,7 +1207,7 @@ function startGlass() {
     window.lensSystem = system;
   } catch (err) {
     // 没有 WebGL2：保持 Canvas2D 极光 + CSS 玻璃，功能不受影响
-    console.warn("[lens] WebGL 不可用，使用 CSS 玻璃兜底", err);
+    console.warn("[perch] WebGL 不可用，使用 CSS 玻璃兜底", err);
     finishIntro();
     return;
   }

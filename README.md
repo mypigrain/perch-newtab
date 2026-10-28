@@ -1,11 +1,14 @@
-# 透镜新标签页 · Lens New Tab
+# 栖 · Perch
+
+> 页面栖身的地方。
 
 一个把 Edge / Chrome 新标签页换成**液态玻璃磁贴板**的浏览器扩展。
 
 玻璃不是 CSS 模糊做出来的——它由 [透镜 Lens 设计系统](https://github.com/ruiqichenbiec/design-systems) 的
 WebGL2 渲染器**实时折射**背景的极光场景，移动窗口、拖拽磁贴时折射会真实变化。
 
-![预览](docs/preview.jpg)
+<!-- 截图待补：docs/preview.jpg 还是改名前的版本（页头写着"透镜 Lens"），换新截图后取消注释 -->
+<!-- ![预览](docs/preview.jpg) -->
 
 ## 它解决什么
 
@@ -45,7 +48,7 @@ WebGL2 渲染器**实时折射**背景的极光场景，移动窗口、拖拽磁
 - 底部 **重置** → 清空成空白页（不恢复示例数据）
 - 想看填好的样子：`导入布局` → 选 `docs/sample-layout.json`
 
-数据全部存在扩展自己的 `localStorage`（键名 `lens-newtab:v1`），不上传任何地方。
+数据全部存在扩展自己的 `localStorage`（键名 `perch:v1`），不上传任何地方。
 重装扩展、换电脑时用「导出布局」下载 JSON 带过去，「导入布局」回填即可。
 
 ## 权限
@@ -68,7 +71,7 @@ src/
 vendor/lens/           透镜 Lens 设计系统运行时（上游副本，勿改，见其 UPSTREAM.md）
 icons/                 图标（由 tools/make-icons.py 生成）
 tools/make-icons.py    重新生成图标
-docs/preview.jpg       截图
+docs/preview.jpg       截图（待更新，还是改名前的版本）
 docs/sample-layout.json  可导入的示例布局
 ```
 
@@ -104,6 +107,7 @@ docs/sample-layout.json  可导入的示例布局
 
 ## 下一步
 
+- [ ] 换一张新截图（`docs/preview.jpg` 还是改名前的版本）
 - [x] 导出 / 导入布局 JSON（换机不丢数据）
 - [x] 从 Edge 收藏夹批量导入
 - [x] 项目归档（收进档案库，可恢复）
