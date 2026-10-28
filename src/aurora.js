@@ -82,7 +82,19 @@
     paint(ctx, { width: w, height: h, dpr });
   }
 
-  window.LensAurora = { paint, paintFallback };
+  /** 把已经画好的兜底画布直接 blit 给渲染器，省掉重跑贝塞尔 + 阴影 + 模糊的开销。 */
+  function blit(ctx, { width, height }) {
+    const src = document.getElementById("fallback");
+    if (!src || !src.width || !src.height) return false;
+    try {
+      ctx.drawImage(src, 0, 0, width, height);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  window.LensAurora = { paint, blit, paintFallback };
 
   // 解析阶段立刻画一次：保证首帧就有背景
   paintFallback();

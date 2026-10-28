@@ -23,8 +23,24 @@ html,body{margin:0;height:100%}
 }
 body.intro-done .intro{--hole:170vmax;opacity:0}
 body.intro-gone .intro{display:none}
+
+/* WebGL 初始化会同步阻塞主线程（编译着色器 + 生成极光贴图，约 200–400ms）。
+   那段时间里主线程一帧都画不出来，任何 JS 驱动的动画都会冻住——
+   所以"卡一回"就是这个。这里给遮罩加一层呼吸光：只用 transform / opacity，
+   跑在合成器线程上，主线程被卡住时依然在动，看起来就不是死机。 */
+.intro::after{
+  content:"";position:absolute;inset:-25%;pointer-events:none;
+  background:radial-gradient(circle at 38% 38%, rgba(255,255,255,.5), rgba(255,255,255,0) 64%);
+  animation:introBreath 2.6s ease-in-out infinite;
+  will-change:transform,opacity;
+}
+@keyframes introBreath{
+  0%,100%{transform:scale(1);opacity:.28}
+  50%{transform:scale(1.18);opacity:.62}
+}
 @media (prefers-reduced-motion:reduce){
   .intro{transition:none}
+  .intro::after{animation:none}
 }
 body{
   background:#cfdeed;

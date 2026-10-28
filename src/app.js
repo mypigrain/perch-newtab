@@ -1118,6 +1118,17 @@ if (!aurora) console.warn("[lens] aurora.js 没有加载，背景会退化成纯
 const paintAurora = aurora ? aurora.paint : () => {};
 const paintFallback = aurora ? aurora.paintFallback : () => {};
 
+/* 渲染器要一张极光贴图。第一次直接复用已经画好的兜底画布（blit），
+   比重新跑一遍贝塞尔 + 阴影 + 模糊快，能少卡几十毫秒。 */
+let artworkPrimed = false;
+function artwork(ctx, size) {
+  if (!artworkPrimed && aurora && aurora.blit) {
+    artworkPrimed = true;
+    if (aurora.blit(ctx, size)) return;
+  }
+  paintAurora(ctx, size);
+}
+
 /** 真正"玻璃上屏"的那一刻才做两件事：把 .lg-surface 交给 shader、把兜底画布淡出。
  *  渲染器的 webgl-ready 只是上下文建好，着色器还没出图；
  *  如果那时候就把 CSS 底色抽掉，磁贴会先变空一帧再变玻璃——就是闪一下。
@@ -1171,7 +1182,7 @@ function startGlass() {
   try {
     system = createGlassSystem(stage, {
       scene: "aurora",
-      artwork: paintAurora,
+      artwork,
       material: "thick",
       motion: !matchMedia("(prefers-reduced-motion: reduce)").matches,
       audio: { enabled: false }
