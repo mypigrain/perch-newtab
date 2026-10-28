@@ -110,33 +110,50 @@ function tileHTML(t, zone, project, i) {
   return `<button class="${cls}" ${attrs} type="button">${icon(t.icon)}<span class="col"><span class="t-name">${esc(t.title)}</span><span class="t-meta mono">${esc(host)}</span></span></button>`;
 }
 
-function renderPinned() {
+/* 每个区域记一个"数据指纹"：指纹没变就不重绘。
+   否则切换项目时固定区会被重建，入场动画会重播一遍。 */
+const seen = { pinned: "", project: "", pills: "", sheet: "" };
+const stable = v => JSON.stringify(v);
+const tileSig = t => [t.id, t.title, t.url, t.size, t.icon];
+const sigPinned = () => stable(DB.pinned.map(tileSig));
+const sigProject = () => stable([DB.currentProject, currentTiles().map(tileSig)]);
+const sigPills = () => stable([DB.currentProject, DB.projects.map(p => [p.id, p.name, (DB.projectTiles[p.id] || []).length])]);
+const sigSheet = () => stable(DB.occasional.map(o => [o.id, o.title, o.url, o.icon, o.group]));
+
+function renderPinned(force) {
+  const s = sigPinned();
+  if (!force && s === seen.pinned) return;
+  seen.pinned = s;
   $("grid-pinned").innerHTML = DB.pinned.map((t, i) => tileHTML(t, "pinned", "", i)).join("");
 }
 
-function renderProject() {
+function renderProject(force) {
+  const s = sigProject();
+  if (!force && s === seen.project) return;
+  seen.project = s;
   $("grid-project").innerHTML = currentTiles().map((t, i) => tileHTML(t, "project", DB.currentProject, i)).join("");
 }
 
-function renderPills() {
+function renderPills(force) {
+  const s = sigPills();
+  if (!force && s === seen.pills) return;
+  seen.pills = s;
   const wrap = $("pills");
-  const sig = DB.currentProject + "|" + DB.projects.map(p => p.id + (DB.projectTiles[p.id] || []).length).join(",");
-  const same = wrap.dataset.sig === sig;
   wrap.innerHTML =
     DB.projects.map(p =>
       `<button class="pill lg-surface${p.id === DB.currentProject ? " on" : ""}" data-proj="${p.id}" type="button" data-glass="selected">${esc(p.name)}<span class="n mono">${(DB.projectTiles[p.id] || []).length}</span></button>`
     ).join("") + `<button class="pill ghost" id="newProj" type="button">＋ 新项目</button>`;
-  wrap.dataset.sig = sig;
   wrap.querySelectorAll(".pill[data-proj]").forEach(el => {
     el.onclick = () => { DB.currentProject = el.dataset.proj; save(); renderAll(); };
   });
   $("newProj").onclick = addProject;
   wrap.querySelectorAll(".pill.on").forEach(el => el.style.setProperty("--glass-selection", "1"));
-  if (!same) wrap.classList.add("repaint");
-  requestAnimationFrame(() => wrap.classList.remove("repaint"));
 }
 
-function renderSheet() {
+function renderSheet(force) {
+  const s = sigSheet();
+  if (!force && s === seen.sheet) return;
+  seen.sheet = s;
   const groups = new Map();
   DB.occasional.forEach(o => {
     if (!groups.has(o.group)) groups.set(o.group, []);
@@ -155,7 +172,7 @@ function renderSheet() {
   });
 }
 
-function renderAll() { renderPills(); renderPinned(); renderProject(); renderSheet(); }
+function renderAll(force) { renderPills(force); renderPinned(force); renderProject(force); renderSheet(force); }
 
 /* ============================== 打开页面 ============================== */
 function openUrl(url, title) {
@@ -274,6 +291,9 @@ function persistOrder() {
     if (t) { el.dataset.zone = "project"; el.dataset.proj = DB.currentProject; }
     return t;
   }).filter(Boolean);
+  // DOM 已经是最新顺序，同步指纹，避免下次 renderAll 重绘并重播动画
+  seen.pinned = sigPinned();
+  seen.project = sigProject();
   save();
 }
 
@@ -414,6 +434,109 @@ function addProject() {
   save(); renderAll();
 }
 
+/* ============================== 布局导入 / 导出 ============================== */
+const FORMAT = "lens-newtab";
+const FORMAT_VERSION = 1;
+let uidCounter = 0;
+const uid = prefix => `${prefix}${Date.now().toString(36)}${(++uidCounter).toString(36)}`;
+
+function cleanTile(raw, used) {
+  if (!raw || typeof raw !== "object") return null;
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  if (!/^https?:\/\//i.test(url)) return null;
+  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 80) : url;
+  const size = ["s", "w", "b"].includes(raw.size) ? raw.size : "s";
+  const iconName = ICONS[raw.icon] ? raw.icon : "link";
+  const id = typeof raw.id === "string" && raw.id && !used.has(raw.id) ? raw.id : uid("t");
+  used.add(id);
+  return { id, title, url, icon: iconName, size };
+}
+
+/** 把任意来源的 JSON 收敛成合法的 DB；不认识的东西直接丢掉，不抛异常到 UI 之外。 */
+function normalizeLayout(raw) {
+  const src = raw && typeof raw === "object" && raw.data && typeof raw.data === "object" ? raw.data : raw;
+  if (!src || typeof src !== "object") throw new Error("文件结构不对");
+  if (!Array.isArray(src.projects) || !src.projects.length) throw new Error("缺少 projects 列表");
+
+  const projects = src.projects.slice(0, 30).map((p, i) => ({
+    id: typeof p?.id === "string" && p.id ? p.id : `p${i + 1}`,
+    name: typeof p?.name === "string" && p.name.trim() ? p.name.trim().slice(0, 40) : `项目 ${i + 1}`
+  }));
+  const seenP = new Set();
+  projects.forEach((p, i) => {
+    let id = p.id;
+    let n = 0;
+    while (seenP.has(id)) id = `p${i + 1}_${++n}`;
+    seenP.add(id);
+    p.id = id;
+  });
+
+  const used = new Set();
+  const pinned = (Array.isArray(src.pinned) ? src.pinned : []).map(t => cleanTile(t, used)).filter(Boolean);
+
+  const srcTiles = src.projectTiles && typeof src.projectTiles === "object" ? src.projectTiles : {};
+  const projectTiles = {};
+  projects.forEach(p => {
+    const list = Array.isArray(srcTiles[p.id]) ? srcTiles[p.id] : [];
+    projectTiles[p.id] = list.map(t => cleanTile(t, used)).filter(Boolean);
+  });
+
+  const occasional = (Array.isArray(src.occasional) ? src.occasional : [])
+    .map(t => {
+      const cleaned = cleanTile(t, used);
+      if (!cleaned) return null;
+      const group = typeof t.group === "string" && t.group.trim() ? t.group.trim().slice(0, 20) : "未分类";
+      return { ...cleaned, group };
+    })
+    .filter(Boolean);
+
+  const currentProject = projects.some(p => p.id === src.currentProject) ? src.currentProject : projects[0].id;
+  return { currentProject, projects, pinned, projectTiles, occasional };
+}
+
+function exportLayout() {
+  const payload = {
+    format: FORMAT,
+    version: FORMAT_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: DB
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `lens-newtab-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  const n = DB.pinned.length + DB.occasional.length + Object.values(DB.projectTiles).reduce((s, l) => s + l.length, 0);
+  toast(`已导出 ${DB.projects.length} 个项目 · ${n} 个页面`);
+}
+
+function importLayout(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let next;
+    try {
+      const parsed = JSON.parse(String(reader.result));
+      if (parsed && parsed.format && parsed.format !== FORMAT) throw new Error("不是本扩展的布局文件");
+      next = normalizeLayout(parsed);
+    } catch (err) {
+      toast(`导入失败：${err && err.message ? err.message : "无法解析"}`);
+      return;
+    }
+    const n = next.pinned.length + next.occasional.length + Object.values(next.projectTiles).reduce((s, l) => s + l.length, 0);
+    if (!confirm(`将导入 ${next.projects.length} 个项目、${n} 个页面，并覆盖当前布局。继续？`)) return;
+    DB = next;
+    save();
+    renderAll(true);
+    toast(`已导入 ${next.projects.length} 个项目 · ${n} 个页面`);
+  };
+  reader.onerror = () => toast("读取文件失败");
+  reader.readAsText(file);
+}
+
 /* ============================== 绑定 ============================== */
 function bind() {
   $("searchBtn").onclick = openPalette;
@@ -424,7 +547,12 @@ function bind() {
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSel(-1); }
     else if (e.key === "Enter") { e.preventDefault(); chooseSel(); }
   });
-  $("sheeth").onclick = () => $("sheet").classList.toggle("open");
+  $("sheeth").onclick = () => {
+    const sheet = $("sheet");
+    const open = sheet.classList.toggle("open");
+    // 展开后可能超出可视区，滚到能看全的位置（高度不变，不会触发画布 resize）
+    if (open) setTimeout(() => sheet.scrollIntoView({ block: "nearest", behavior: "smooth" }), 260);
+  };
   $("veil").onclick = closeAll;
   document.querySelectorAll("[data-add]").forEach(b => {
     b.onclick = e => { e.stopPropagation(); openAdd(b.dataset.add); };
@@ -434,8 +562,20 @@ function bind() {
   $("openAll").onclick = () => toast(`将打开「${currentProject().name}」的 ${currentTiles().length} 个页面`);
   $("openAllPinned").onclick = () => toast(`固定区共 ${DB.pinned.length} 个页面`);
   $("reset").onclick = () => {
-    if (confirm("恢复初始示例数据？当前布局会被覆盖。")) { DB = clone(SEED); save(); renderAll(); }
+    if (confirm("恢复初始示例数据？当前布局会被覆盖，建议先导出备份。")) {
+      DB = clone(SEED);
+      save();
+      renderAll(true);
+      toast("已恢复示例数据");
+    }
   };
+  $("export").onclick = exportLayout;
+  $("import").onclick = () => $("importFile").click();
+  $("importFile").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) importLayout(file);
+    e.target.value = ""; // 允许连续导入同一个文件
+  });
   document.addEventListener("keydown", e => {
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openPalette(); }
     if (e.key === "Escape") closeAll();

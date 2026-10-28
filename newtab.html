@@ -15,6 +15,7 @@
   <canvas class="fallback" id="fallback" aria-hidden="true"></canvas>
 
   <div class="shell">
+  <div class="shellin">
 
     <header class="top">
       <div class="brand"><span class="brand-zh">透镜</span> <span class="brand-en">Lens</span></div>
@@ -71,10 +72,17 @@
 
     <footer class="foot mono">
       <span>双击空白处新增 · 右键磁贴改大小 / 移动 / 删除 · 拖拽排序 · Ctrl K 搜索</span>
-      <span class="rst" id="reset">重置</span>
+      <span class="foot-actions">
+        <button class="rst" id="export" type="button">导出布局</button>
+        <button class="rst" id="import" type="button">导入布局</button>
+        <button class="rst" id="reset" type="button">重置</button>
+      </span>
     </footer>
 
   </div>
+  </div>
+
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
 
   <div class="veil" id="veil"></div>
 

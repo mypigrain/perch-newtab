@@ -13,12 +13,14 @@ body{
 }
 .mono{font:12px/1.4 ui-monospace,"SFMono-Regular",Consolas,monospace;letter-spacing:.02em;color:#4a5672}
 
-/* 整页就是一块玻璃舞台 */
+/* 整页就是一块玻璃舞台。
+   高度锁定在视口：抽屉展开只改变内部滚动高度，不触发画布 resize，
+   否则不透明的 WebGL 画布会在重置尺寸的那一帧闪黑。 */
 #stage{
   position:relative;
-  min-height:100vh;
+  height:100vh;
   border-radius:0;
-  overflow:visible;
+  overflow:hidden;
   padding:0;
   background:#cfdeed;
 }
@@ -28,15 +30,21 @@ body{
 /* WebGL 未就绪时，玻璃用 CSS 兜底 */
 .stage:not(.webgl-ready) .lg-surface{background:rgba(245,250,255,.42);backdrop-filter:blur(18px) saturate(1.3)}
 
+/* 滚动容器（舞台高度恒定，内容在这里滚） */
 .shell{
   position:relative;
   z-index:2;
-  width:min(1120px,calc(100% - 96px));
-  margin:0 auto;
-  min-height:100vh;
+  height:100%;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
   display:flex;
   flex-direction:column;
-  justify-content:center;
+}
+/* 内容居中；内容超高时 auto margin 归零，从顶部开始滚 */
+.shellin{
+  width:min(1120px,calc(100% - 96px));
+  margin:auto;
   padding:44px 0;
 }
 
@@ -161,8 +169,12 @@ body.is-dragging{cursor:grabbing;user-select:none}
 .sitem .lg-icon{width:17px;height:17px;stroke-width:1.6;color:#3f5573}
 
 /* ---------------- 底注 ---------------- */
-.foot{display:flex;justify-content:space-between;gap:16px;margin-top:30px;font-size:11.5px;color:#5c6a86}
-.rst{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.foot{display:flex;justify-content:space-between;gap:16px;align-items:baseline;margin-top:30px;font-size:11.5px;color:#5c6a86}
+.foot-actions{display:flex;gap:14px;flex:0 0 auto}
+.rst{
+  background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;white-space:nowrap;
+  text-decoration:underline dotted;text-underline-offset:3px;
+}
 .rst:hover{color:#2875ed}
 
 /* ---------------- 弹层 ---------------- */
