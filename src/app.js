@@ -25,59 +25,19 @@ const icon = name => `<svg class="lg-icon" viewBox="0 0 24 24">${ICONS[name] || 
 const KEY = "lens-newtab:v1";
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-const clone = o => JSON.parse(JSON.stringify(o));
 
-const T = (id, title, url, iconName, size) => ({ id, title, url, icon: iconName, size: size || "s" });
-
-const SEED = {
-  currentProject: "p1",
-  projects: [
-    { id: "p1", name: "Power 优化" },
-    { id: "p2", name: "Q4 重构" },
-    { id: "p3", name: "运维值班" }
-  ],
-  pinned: [
-    T("t1", "堡垒机", "https://bastion.corp.example", "server"),
-    T("t2", "Jira", "https://jira.corp.example", "grid"),
-    T("t3", "Confluence", "https://confluence.corp.example", "doc"),
-    T("t4", "GitLab", "https://gitlab.corp.example", "code"),
-    T("t5", "邮箱", "https://mail.corp.example", "mail"),
-    T("t6", "工时填报", "https://timesheet.corp.example", "clock")
-  ],
-  projectTiles: {
-    p1: [
-      T("a1", "Power 优化 · 项目文档", "https://confluence.corp.example/pages/power", "doc", "w"),
-      T("a2", "优化任务看板", "https://jira.corp.example/board/power", "grid", "w"),
-      T("a3", "性能基线数据", "https://metrics.corp.example/baseline", "chart"),
-      T("a4", "功耗对比曲线", "https://grafana.corp.example/d/power", "gauge"),
-      T("a5", "周会纪要", "https://docs.corp.example/power-weekly", "doc"),
-      T("a6", "需求池", "https://jira.corp.example/pool", "layers")
-    ],
-    p2: [
-      T("b1", "重构设计文档", "https://confluence.corp.example/pages/refactor", "doc", "w"),
-      T("b2", "重构任务看板", "https://jira.corp.example/board/refactor", "grid", "w"),
-      T("b3", "接口契约", "https://gitlab.corp.example/api-spec", "code")
-    ],
-    p3: [
-      T("c1", "值班表", "https://docs.corp.example/oncall", "clock", "w"),
-      T("c2", "告警面板", "https://grafana.corp.example/d/alerts", "bell", "w"),
-      T("c3", "故障复盘库", "https://confluence.corp.example/pages/postmortem", "doc")
-    ]
-  },
-  occasional: [
-    { id: "o1", title: "测试数据平台", url: "https://metrics.corp.example/testdata", icon: "chart", group: "测试数据" },
-    { id: "o2", title: "历史数据查询", url: "https://metrics.corp.example/history", icon: "gauge", group: "测试数据" },
-    { id: "o3", title: "性能对比报表", url: "https://metrics.corp.example/report", icon: "chart", group: "测试数据" },
-    { id: "o4", title: "Grafana 监控", url: "https://grafana.corp.example", icon: "gauge", group: "监控告警" },
-    { id: "o5", title: "ELK 日志平台", url: "https://elk.corp.example", icon: "doc", group: "监控告警" },
-    { id: "o6", title: "发布流水线", url: "https://ci.corp.example", icon: "layers", group: "运维工具" },
-    { id: "o7", title: "权限申请", url: "https://it.corp.example/access", icon: "link", group: "运维工具" },
-    { id: "o8", title: "历史版本下载", url: "https://nexus.corp.example", icon: "server", group: "历史存档" }
-  ],
+/** 空白布局：首装和「重置」都从这里开始。
+ *  内置示例数据已移除——想要一个填好的模板，导入 docs/sample-layout.json。 */
+const emptyLayout = () => ({
+  currentProject: "p0",
+  projects: [{ id: "p0", name: "默认项目" }],
+  pinned: [],
+  projectTiles: { p0: [] },
+  occasional: [],
   archived: []
-};
+});
 
-let DB = load() || clone(SEED);
+let DB = load() || emptyLayout();
 // 老数据兼容：早期版本没有 archived
 if (!Array.isArray(DB.archived)) DB.archived = [];
 DB.occasional.forEach(o => { if (!o.group) o.group = "未分类"; });
@@ -100,6 +60,115 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("on"), 2000);
 }
+
+/* ============================== 自绘对话框 ============================== */
+/* 原生 prompt() 在扩展页里不可靠，confirm() 又是系统样式，都换成页面内的玻璃弹窗。 */
+let askResolve = null;
+
+function ask({ title, message = "", value = null, okText = "确定", danger = false }) {
+  return new Promise(resolve => {
+    askResolve = resolve;
+    const dlg = $("askDlg");
+    const isText = value !== null;
+    $("askTitle").textContent = title || "";
+    $("askMsg").textContent = message;
+    dlg.classList.toggle("no-msg", !message);
+    dlg.classList.toggle("no-input", !isText);
+    $("askInput").value = isText ? String(value) : "";
+    $("askOk").textContent = okText;
+    $("askOk").classList.toggle("danger", !!danger);
+    $("veil").classList.add("on");
+    dlg.classList.add("on");
+    setTimeout(() => {
+      if (isText) { $("askInput").focus(); $("askInput").select(); }
+      else $("askOk").focus();
+    }, 40);
+  });
+}
+function askAnswer(result) {
+  const r = askResolve;
+  askResolve = null;
+  $("veil").classList.remove("on");
+  $("askDlg").classList.remove("on");
+  if (r) r(result);
+}
+const askText = (title, value = "", extra = {}) => ask({ title, value, ...extra });
+const askConfirm = (title, message = "", danger = false) => ask({ title, message, danger });
+
+/* ============================== 自绘下拉 ============================== */
+/* 原生 <select> 的下拉弹层是系统画的（白底灰高亮），没法跟玻璃统一。
+   这里保留原生 select 存值，上面盖一层自绘控件。 */
+const glassSelects = new Map();
+
+function enhanceSelect(id) {
+  const sel = $(id);
+  if (!sel || !sel.parentNode || glassSelects.has(id)) return glassSelects.get(id) || null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "gsel";
+  sel.parentNode.insertBefore(wrap, sel);
+  sel.classList.add("gsel-native");
+  wrap.appendChild(sel);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "gsel-btn";
+  btn.dataset.glass = "small";
+  btn.setAttribute("role", "combobox");
+  btn.setAttribute("aria-expanded", "false");
+  btn.innerHTML = '<span class="gsel-text"></span><svg class="lg-icon gsel-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>';
+
+  const pop = document.createElement("div");
+  pop.className = "gsel-pop";
+  wrap.append(btn, pop);
+
+  function close() {
+    wrap.classList.remove("open");
+    btn.setAttribute("aria-expanded", "false");
+  }
+
+  const api = {
+    refresh() {
+      const opts = [...sel.options];
+      const cur = opts.find(o => o.selected) || opts[0];
+      btn.querySelector(".gsel-text").textContent = cur ? cur.text : "";
+      pop.innerHTML = opts.map((o, i) =>
+        `<button class="gsel-opt${o.selected ? " on" : ""}" type="button" data-i="${i}">${esc(o.text)}</button>`
+      ).join("");
+      pop.querySelectorAll(".gsel-opt").forEach(b => {
+        b.onclick = () => {
+          const opt = opts[Number(b.dataset.i)];
+          if (!opt) return;
+          sel.value = opt.value;
+          close();
+          api.refresh();
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+      });
+    },
+    open() {
+      api.refresh();
+      const r = btn.getBoundingClientRect();
+      wrap.classList.toggle("up", r.bottom + 280 > innerHeight && r.top > 280);
+      wrap.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+    },
+    close,
+    el: wrap
+  };
+
+  btn.onclick = e => {
+    e.stopPropagation();
+    if (wrap.classList.contains("open")) close();
+    else api.open();
+  };
+  document.addEventListener("click", e => { if (!wrap.contains(e.target)) close(); });
+
+  glassSelects.set(id, api);
+  api.refresh();
+  return api;
+}
+const refreshSelect = id => { const s = glassSelects.get(id); if (s) s.refresh(); };
 
 /* ============================== 渲染 ============================== */
 function tileHTML(t, zone, project, i) {
@@ -163,6 +232,11 @@ function renderSheet(force) {
     if (!groups.has(o.group)) groups.set(o.group, []);
     groups.get(o.group).push(o);
   });
+  if (!DB.occasional.length) {
+    $("sheetTags").innerHTML = "";
+    $("sheetin").innerHTML = '<div class="ask-empty">还没有收起的页面。右键任意磁贴 →「收进偶尔用」。</div>';
+    return;
+  }
   $("sheetTags").innerHTML = [...groups.keys()]
     .map(g => `<span data-group="${esc(g)}" title="右键可重命名 / 删除分组">${esc(g)}</span>`).join("");
   $("sheetin").innerHTML = [...groups.entries()].map(([g, items]) => `
@@ -406,22 +480,22 @@ function openProjectMenu(e, id) {
   });
 }
 
-function renameProject(id) {
+async function renameProject(id) {
   const p = DB.projects.find(x => x.id === id);
   if (!p) return;
-  const name = prompt("项目名称：", p.name);
-  if (!name || !name.trim()) return;
-  p.name = name.trim().slice(0, 40);
+  const name = await askText("重命名项目", p.name);
+  if (!name) return;
+  p.name = name.slice(0, 40);
   save();
   renderAll(true);
 }
 
-function archiveProject(id) {
+async function archiveProject(id) {
   const p = DB.projects.find(x => x.id === id);
   if (!p) return;
   if (DB.projects.length <= 1) { toast("至少要保留一个项目"); return; }
   const tiles = DB.projectTiles[p.id] || [];
-  if (!confirm(`归档「${p.name}」？\n\n${tiles.length} 个磁贴会收进档案库，随时可以恢复。`)) return;
+  if (!(await askConfirm(`归档「${p.name}」`, `${tiles.length} 个磁贴会收进档案库，随时可以恢复。`))) return;
   DB.archived.unshift({ id: p.id, name: p.name, archivedAt: new Date().toISOString(), tiles });
   delete DB.projectTiles[p.id];
   DB.projects = DB.projects.filter(x => x.id !== id);
@@ -447,11 +521,11 @@ function restoreProject(id) {
   toast(`已恢复「${a.name}」`);
 }
 
-function dropArchived(id) {
+async function dropArchived(id) {
   const i = DB.archived.findIndex(a => a.id === id);
   if (i < 0) return;
   const a = DB.archived[i];
-  if (!confirm(`永久删除「${a.name}」？删除后无法恢复。`)) return;
+  if (!(await askConfirm(`删除「${a.name}」`, "永久删除，无法恢复。", true))) return;
   DB.archived.splice(i, 1);
   save();
   renderAll(true);
@@ -567,6 +641,7 @@ function renderBookmarkDialog() {
   const dest = $("bmDest");
   dest.innerHTML = opts.join("");
   dest.value = `project:${DB.currentProject}`;
+  refreshSelect("bmDest");
 
   $("bmExtra").textContent = bm.extra > 0 ? `（只列出前 ${bm.items.length} 条，还有 ${bm.extra} 条可以再导一次）` : "";
 
@@ -619,7 +694,7 @@ function updateBmCount() {
   $("bmCount").textContent = `已选 ${bm.sel.size} / ${bm.items.length}`;
 }
 
-function confirmBookmarks() {
+async function confirmBookmarks() {
   if (!bm.sel.size) { toast("至少选一个"); return; }
   const dest = $("bmDest").value;
   let target;
@@ -628,9 +703,9 @@ function confirmBookmarks() {
   else {
     let g = dest.slice(4);
     if (g === "__new__") {
-      const name = prompt("新分组名称：", "");
-      if (!name || !name.trim()) return;
-      g = name.trim().slice(0, 20);
+      const name = await askText("新分组名称", "");
+      if (!name) return;
+      g = name.slice(0, 20);
     }
     target = { kind: "occ", group: g };
   }
@@ -666,18 +741,18 @@ function moveToGroup(id, group) {
   toast(`已移到「${group}」`);
 }
 
-function renameGroup(from) {
-  const name = prompt("分组名：", from);
-  if (!name || !name.trim() || name.trim() === from) return;
-  const to = name.trim().slice(0, 20);
+async function renameGroup(from) {
+  const name = await askText("重命名分组", from);
+  if (!name || name === from) return;
+  const to = name.slice(0, 20);
   DB.occasional.forEach(o => { if (o.group === from) o.group = to; });
   save();
   renderAll(true);
 }
 
-function dropGroup(group) {
+async function dropGroup(group) {
   const n = DB.occasional.filter(o => o.group === group).length;
-  if (!confirm(`删除分组「${group}」？\n组内 ${n} 个页面会移到「未分类」，不会丢。`)) return;
+  if (!(await askConfirm(`删除分组「${group}」`, `组内 ${n} 个页面会移到「未分类」，不会丢。`, true))) return;
   DB.occasional.forEach(o => { if (o.group === group) o.group = "未分类"; });
   save();
   renderAll(true);
@@ -697,13 +772,13 @@ function openOccMenu(e, id) {
   el.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
   el.style.top = Math.min(e.clientY, innerHeight - 250) + "px";
   el.querySelectorAll("[data-move]").forEach(b => {
-    b.onclick = () => {
+    b.onclick = async () => {
       let g = b.dataset.move;
       closeCtx();
       if (g === "__new__") {
-        const name = prompt("新分组名称：", "");
-        if (!name || !name.trim()) return;
-        g = name.trim().slice(0, 20);
+        const name = await askText("新分组名称", "");
+        if (!name) return;
+        g = name.slice(0, 20);
       }
       moveToGroup(id, g);
     };
@@ -814,8 +889,9 @@ function syncGroupField() {
     groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("") +
     `<option value="__new__">＋ 新建分组…</option>`;
   if (!groups.length) $("mGroup").value = "__new__";
+  refreshSelect("mGroup");
 }
-function submitAdd() {
+async function submitAdd() {
   const title = $("mTitle").value.trim();
   let url = $("mUrl").value.trim();
   const zone = $("mZone").value;
@@ -828,22 +904,23 @@ function submitAdd() {
   else {
     let group = $("mGroup").value;
     if (!group || group === "__new__") {
-      const name = prompt("新分组名称：", "未分类");
-      if (!name || !name.trim()) return;
-      group = name.trim().slice(0, 20);
+      const name = await askText("新分组名称", "");
+      if (!name) return;
+      group = name.slice(0, 20);
     }
     DB.occasional.push({ ...t, group });
   }
   save(); closeAll(); renderAll(); toast(`已添加「${title}」`);
 }
-function addProject() {
-  const name = prompt("新项目名称：");
+async function addProject() {
+  const name = await askText("新建项目", "");
   if (!name) return;
   const id = "p" + Date.now();
-  DB.projects.push({ id, name: name.trim() });
+  DB.projects.push({ id, name: name.slice(0, 40) });
   DB.projectTiles[id] = [];
   DB.currentProject = id;
-  save(); renderAll();
+  save();
+  renderAll();
 }
 
 /* ============================== 布局导入 / 导出 ============================== */
@@ -938,7 +1015,7 @@ function exportLayout() {
 
 function importLayout(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     let next;
     try {
       const parsed = JSON.parse(String(reader.result));
@@ -949,7 +1026,7 @@ function importLayout(file) {
       return;
     }
     const n = next.pinned.length + next.occasional.length + Object.values(next.projectTiles).reduce((s, l) => s + l.length, 0);
-    if (!confirm(`将导入 ${next.projects.length} 个项目、${n} 个页面，并覆盖当前布局。继续？`)) return;
+    if (!(await askConfirm("导入布局", `将导入 ${next.projects.length} 个项目、${n} 个页面，并覆盖当前布局。`))) return;
     DB = next;
     save();
     renderAll(true);
@@ -975,7 +1052,20 @@ function bind() {
     // 展开后可能超出可视区，滚到能看全的位置（高度不变，不会触发画布 resize）
     if (open) setTimeout(() => sheet.scrollIntoView({ block: "nearest", behavior: "smooth" }), 260);
   };
-  $("veil").onclick = closeAll;
+  $("veil").onclick = () => { if (askResolve) askAnswer(null); else closeAll(); };
+
+  // 自绘下拉：原生 select 的下拉弹层是系统画的，换成页面内控件
+  ["mZone", "mGroup", "bmDest"].forEach(enhanceSelect);
+
+  // 自绘对话框
+  $("askCancel").onclick = () => askAnswer(null);
+  $("askOk").onclick = () => {
+    const isText = !$("askDlg").classList.contains("no-input");
+    askAnswer(isText ? $("askInput").value.trim() : true);
+  };
+  $("askInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); $("askOk").click(); }
+  });
   document.querySelectorAll("[data-add]").forEach(b => {
     b.onclick = e => { e.stopPropagation(); openAdd(b.dataset.add); };
   });
@@ -983,13 +1073,12 @@ function bind() {
   $("mOk").onclick = submitAdd;
   $("openAll").onclick = () => toast(`将打开「${currentProject().name}」的 ${currentTiles().length} 个页面`);
   $("openAllPinned").onclick = () => toast(`固定区共 ${DB.pinned.length} 个页面`);
-  $("reset").onclick = () => {
-    if (confirm("恢复初始示例数据？当前布局会被覆盖，建议先导出备份。")) {
-      DB = clone(SEED);
-      save();
-      renderAll(true);
-      toast("已恢复示例数据");
-    }
+  $("reset").onclick = async () => {
+    if (!(await askConfirm("重置为空白", "会清空所有页面、项目和归档，恢复成一个空的新标签页。\n建议先「导出布局」备份。", true))) return;
+    DB = emptyLayout();
+    save();
+    renderAll(true);
+    toast("已重置为空白");
   };
   $("export").onclick = exportLayout;
   $("import").onclick = () => $("importFile").click();
@@ -1005,8 +1094,12 @@ function bind() {
   $("archiveBox").onclick = openArchive;
   $("archClose").onclick = closeAll;
   document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      if (askResolve) { askAnswer(null); return; }
+      closeAll();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openPalette(); }
-    if (e.key === "Escape") closeAll();
   });
   document.addEventListener("click", e => { if (!$("ctx").contains(e.target)) closeCtx(); });
   document.addEventListener("pointerdown", onPointerDown);
@@ -1025,14 +1118,31 @@ if (!aurora) console.warn("[lens] aurora.js 没有加载，背景会退化成纯
 const paintAurora = aurora ? aurora.paint : () => {};
 const paintFallback = aurora ? aurora.paintFallback : () => {};
 
-/** WebGL 出第一帧之后再淡出兜底画布，避免"CSS 玻璃 → 真玻璃"之间闪一帧空白。 */
-function fadeFallback() {
+/** 真正"玻璃上屏"的那一刻才做两件事：把 .lg-surface 交给 shader、把兜底画布淡出。
+ *  渲染器的 webgl-ready 只是上下文建好，着色器还没出图；
+ *  如果那时候就把 CSS 底色抽掉，磁贴会先变空一帧再变玻璃——就是闪一下。
+ *  renderer.lastTime 在第一帧真正画完时才 > 0，用它当信号最准。 */
+let glassCommitted = false;
+function commitGlass() {
+  if (glassCommitted) return;
+  glassCommitted = true;
+  document.body.classList.add("glass-on");
   const c = $("fallback");
   if (!c) return;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    c.style.opacity = "0";
-    setTimeout(() => { c.style.display = "none"; }, 280);
-  }));
+  c.style.opacity = "0";
+  setTimeout(() => { c.style.display = "none"; }, 300);
+}
+
+function whenGlassDrawn() {
+  const renderer = window.lensSystem && window.lensSystem.renderer;
+  const started = performance.now();
+  const tick = () => {
+    if (glassCommitted) return;
+    const drawn = renderer && renderer.lastTime > 0;
+    if (drawn || performance.now() - started > 1200) { commitGlass(); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 /* ============================== 玻璃：空闲时接管 ============================== */
@@ -1055,10 +1165,10 @@ function startGlass() {
     return;
   }
 
-  // 渲染器就绪后会加上 webgl-ready
-  if (stage.classList.contains("webgl-ready")) { fadeFallback(); return; }
+  // 渲染器就绪后会加上 webgl-ready，等它真正画出第一帧再切换
+  if (stage.classList.contains("webgl-ready")) { whenGlassDrawn(); return; }
   const mo = new MutationObserver(() => {
-    if (stage.classList.contains("webgl-ready")) { mo.disconnect(); fadeFallback(); }
+    if (stage.classList.contains("webgl-ready")) { mo.disconnect(); whenGlassDrawn(); }
   });
   mo.observe(stage, { attributes: true, attributeFilter: ["class"] });
   // 兜底：6 秒内没就绪就保持现状，别让观察器一直挂着

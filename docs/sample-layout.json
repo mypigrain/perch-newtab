@@ -1,0 +1,52 @@
+{
+  "format": "lens-newtab",
+  "version": 1,
+  "exportedAt": "2026-10-29T00:00:00.000Z",
+  "data": {
+    "currentProject": "p1",
+    "projects": [
+      { "id": "p1", "name": "Power 优化" },
+      { "id": "p2", "name": "Q4 重构" },
+      { "id": "p3", "name": "运维值班" }
+    ],
+    "pinned": [
+      { "id": "t1", "title": "堡垒机", "url": "https://bastion.corp.example", "icon": "server", "size": "s" },
+      { "id": "t2", "title": "Jira", "url": "https://jira.corp.example", "icon": "grid", "size": "s" },
+      { "id": "t3", "title": "Confluence", "url": "https://confluence.corp.example", "icon": "doc", "size": "s" },
+      { "id": "t4", "title": "GitLab", "url": "https://gitlab.corp.example", "icon": "code", "size": "s" },
+      { "id": "t5", "title": "邮箱", "url": "https://mail.corp.example", "icon": "mail", "size": "s" },
+      { "id": "t6", "title": "工时填报", "url": "https://timesheet.corp.example", "icon": "clock", "size": "s" }
+    ],
+    "projectTiles": {
+      "p1": [
+        { "id": "a1", "title": "Power 优化 · 项目文档", "url": "https://confluence.corp.example/pages/power", "icon": "doc", "size": "w" },
+        { "id": "a2", "title": "优化任务看板", "url": "https://jira.corp.example/board/power", "icon": "grid", "size": "w" },
+        { "id": "a3", "title": "性能基线数据", "url": "https://metrics.corp.example/baseline", "icon": "chart", "size": "s" },
+        { "id": "a4", "title": "功耗对比曲线", "url": "https://grafana.corp.example/d/power", "icon": "gauge", "size": "s" },
+        { "id": "a5", "title": "周会纪要", "url": "https://docs.corp.example/power-weekly", "icon": "doc", "size": "s" },
+        { "id": "a6", "title": "需求池", "url": "https://jira.corp.example/pool", "icon": "layers", "size": "s" }
+      ],
+      "p2": [
+        { "id": "b1", "title": "重构设计文档", "url": "https://confluence.corp.example/pages/refactor", "icon": "doc", "size": "w" },
+        { "id": "b2", "title": "重构任务看板", "url": "https://jira.corp.example/board/refactor", "icon": "grid", "size": "w" },
+        { "id": "b3", "title": "接口契约", "url": "https://gitlab.corp.example/api-spec", "icon": "code", "size": "s" }
+      ],
+      "p3": [
+        { "id": "c1", "title": "值班表", "url": "https://docs.corp.example/oncall", "icon": "clock", "size": "w" },
+        { "id": "c2", "title": "告警面板", "url": "https://grafana.corp.example/d/alerts", "icon": "bell", "size": "w" },
+        { "id": "c3", "title": "故障复盘库", "url": "https://confluence.corp.example/pages/postmortem", "icon": "doc", "size": "s" }
+      ]
+    },
+    "occasional": [
+      { "id": "o1", "title": "测试数据平台", "url": "https://metrics.corp.example/testdata", "icon": "chart", "group": "测试数据" },
+      { "id": "o2", "title": "历史数据查询", "url": "https://metrics.corp.example/history", "icon": "gauge", "group": "测试数据" },
+      { "id": "o3", "title": "性能对比报表", "url": "https://metrics.corp.example/report", "icon": "chart", "group": "测试数据" },
+      { "id": "o4", "title": "Grafana 监控", "url": "https://grafana.corp.example", "icon": "gauge", "group": "监控告警" },
+      { "id": "o5", "title": "ELK 日志平台", "url": "https://elk.corp.example", "icon": "doc", "group": "监控告警" },
+      { "id": "o6", "title": "发布流水线", "url": "https://ci.corp.example", "icon": "layers", "group": "运维工具" },
+      { "id": "o7", "title": "权限申请", "url": "https://it.corp.example/access", "icon": "link", "group": "运维工具" },
+      { "id": "o8", "title": "历史版本下载", "url": "https://nexus.corp.example", "icon": "server", "group": "历史存档" }
+    ],
+    "archived": []
+  }
+}
