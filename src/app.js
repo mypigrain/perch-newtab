@@ -37,12 +37,14 @@ const emptyLayout = () => ({
   pinned: [],
   projectTiles: { p0: [] },
   occasional: [],
-  archived: []
+  archived: [],
+  groupOrder: []
 });
 
 let DB = load() || emptyLayout();
-// 老数据兼容：早期版本没有 archived
+// 老数据兼容：早期版本没有这些字段
 if (!Array.isArray(DB.archived)) DB.archived = [];
+if (!Array.isArray(DB.groupOrder)) DB.groupOrder = [];
 DB.occasional.forEach(o => { if (!o.group) o.group = "未分类"; });
 
 function load() {
@@ -59,7 +61,17 @@ function load() {
   } catch { return null; }
 }
 function save() {
+  syncGroupOrder();
   try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* 存不下也不影响使用 */ }
+}
+
+/** 让 groupOrder 始终等于"现存的组 + 用户排好的顺序"：
+ *  已删掉的组剔掉，新出现的组追加到末尾。每次保存前跑一遍，省得每个调用点都记着维护。 */
+function syncGroupOrder() {
+  const present = [...new Set(DB.occasional.map(o => o.group))];
+  const kept = (Array.isArray(DB.groupOrder) ? DB.groupOrder : []).filter(g => present.includes(g));
+  const rest = present.filter(g => !kept.includes(g));
+  DB.groupOrder = [...kept, ...rest];
 }
 
 const currentTiles = () => DB.projectTiles[DB.currentProject] || [];
@@ -230,7 +242,7 @@ const tileSig = t => [t.id, t.title, t.url, t.size, t.icon];
 const sigPinned = () => stable(DB.pinned.map(tileSig));
 const sigProject = () => stable([DB.currentProject, currentTiles().map(tileSig)]);
 const sigPills = () => stable([DB.currentProject, DB.projects.map(p => [p.id, p.name, (DB.projectTiles[p.id] || []).length])]);
-const sigSheet = () => stable(DB.occasional.map(o => [o.id, o.title, o.url, o.icon, o.group]));
+const sigSheet = () => stable([DB.groupOrder, DB.occasional.map(o => [o.id, o.title, o.url, o.icon, o.group])]);
 
 function renderPinned(force) {
   const s = sigPinned();
@@ -278,12 +290,17 @@ function renderSheet(force) {
     $("sheetin").innerHTML = '<div class="ask-empty">还没有收起的页面。右键任意磁贴 →「收进偶尔用」。</div>';
     return;
   }
-  $("sheetTags").innerHTML = [...groups.keys()]
-    .map(g => `<span data-group="${esc(g)}" title="右键可重命名 / 删除分组">${esc(g)}</span>`).join("");
-  $("sheetin").innerHTML = [...groups.entries()].map(([g, items]) => `
+  // 分组顺序以 groupOrder 为准（用户拖动过就按拖的来）
+  const order = allGroups();
+  $("sheetTags").innerHTML = order
+    .map(g => `<span data-group="${esc(g)}" title="拖动可排序 · 右键重命名 / 删除">${esc(g)}</span>`).join("");
+  $("sheetin").innerHTML = order.map(g => {
+    const items = groups.get(g) || [];
+    return `
     <div class="sgroup"><div class="sgl mono">${esc(g)}</div><div class="sitems">
       ${items.map(o => `<button class="sitem lg-surface" data-occ="${o.id}" type="button" data-glass="small">${icon(o.icon)}<span>${esc(o.title)}</span></button>`).join("")}
-    </div></div>`).join("");
+    </div></div>`;
+  }).join("");
   $("sheetin").querySelectorAll("[data-occ]").forEach(el => {
     el.onclick = () => {
       const o = DB.occasional.find(x => x.id === el.dataset.occ);
@@ -825,8 +842,11 @@ async function confirmBookmarks() {
 }
 
 /* ============================== 偶尔用的分组 ============================== */
+/** 现存分组按用户排好的顺序返回；没排过的追加在末尾。 */
 function allGroups() {
-  return [...new Set(DB.occasional.map(o => o.group))];
+  const present = [...new Set(DB.occasional.map(o => o.group))];
+  const order = (Array.isArray(DB.groupOrder) ? DB.groupOrder : []).filter(g => present.includes(g));
+  return [...order, ...present.filter(g => !order.includes(g))];
 }
 
 function moveToGroup(id, group) {
@@ -1120,8 +1140,15 @@ function normalizeLayout(raw) {
     })
     .filter(Boolean);
 
+  const presentGroups = [...new Set(occasional.map(o => o.group))];
+  const rawOrder = Array.isArray(src.groupOrder) ? src.groupOrder.filter(g => typeof g === "string") : [];
+  const groupOrder = [
+    ...rawOrder.filter(g => presentGroups.includes(g)),
+    ...presentGroups.filter(g => !rawOrder.includes(g))
+  ];
+
   const currentProject = projects.some(p => p.id === src.currentProject) ? src.currentProject : projects[0].id;
-  return { currentProject, projects, pinned, projectTiles, occasional, archived };
+  return { currentProject, projects, pinned, projectTiles, occasional, archived, groupOrder };
 }
 
 function exportLayout() {
@@ -1169,6 +1196,52 @@ function importLayout(file) {
   reader.readAsText(file);
 }
 
+/* ============================== 分组拖动排序 ============================== */
+/* 分组顺序存在 DB.groupOrder 里。拖动标签时实时换 DOM 位置，松手后读 DOM 顺序写回。 */
+let tagDrag = null;
+
+function onTagPointerDown(e) {
+  const tag = e.target.closest && e.target.closest("#sheetTags span");
+  if (!tag || e.button !== 0) return;
+  tagDrag = { el: tag, x0: e.clientX, y0: e.clientY, moved: false };
+  document.addEventListener("pointermove", onTagPointerMove);
+  document.addEventListener("pointerup", onTagPointerUp);
+  document.addEventListener("pointercancel", onTagPointerUp);
+}
+
+function onTagPointerMove(e) {
+  if (!tagDrag) return;
+  if (!tagDrag.moved) {
+    if (Math.abs(e.clientX - tagDrag.x0) + Math.abs(e.clientY - tagDrag.y0) < 5) return;
+    tagDrag.moved = true;
+    document.body.classList.add("tag-dragging");
+    tagDrag.el.classList.add("dragging");
+  }
+  e.preventDefault();
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const over = under && under.closest && under.closest("#sheetTags span");
+  if (!over || over === tagDrag.el) return;
+  const r = over.getBoundingClientRect();
+  const before = e.clientX < r.left + r.width / 2;
+  over.parentNode.insertBefore(tagDrag.el, before ? over : over.nextSibling);
+}
+
+function onTagPointerUp() {
+  document.removeEventListener("pointermove", onTagPointerMove);
+  document.removeEventListener("pointerup", onTagPointerUp);
+  document.removeEventListener("pointercancel", onTagPointerUp);
+  const d = tagDrag;
+  tagDrag = null;
+  document.body.classList.remove("tag-dragging");
+  if (!d) return;
+  d.el.classList.remove("dragging");
+  if (!d.moved) return;
+  DB.groupOrder = [...document.querySelectorAll("#sheetTags span")].map(s => s.dataset.group);
+  save();
+  renderSheet(true);
+  toast("分组顺序已更新");
+}
+
 /* ============================== 绑定 ============================== */
 function bind() {
   $("searchBtn").onclick = openPalette;
@@ -1186,6 +1259,10 @@ function bind() {
     if (open) setTimeout(() => sheet.scrollIntoView({ block: "nearest", behavior: "smooth" }), 260);
   };
   $("veil").onclick = () => { if (askResolve) askAnswer(null); else closeAll(); };
+
+  // 分组标签：点它不该收放抽屉（标签在按钮里面），拖动则用来排序
+  $("sheetTags").addEventListener("click", e => e.stopPropagation());
+  $("sheetTags").addEventListener("pointerdown", onTagPointerDown);
 
   // 自绘下拉：原生 select 的下拉弹层是系统画的，换成页面内控件
   ["mZone", "mGroup", "bmDest"].forEach(enhanceSelect);

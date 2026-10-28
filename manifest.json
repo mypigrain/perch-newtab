@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "栖 Perch · 新标签页",
   "short_name": "栖 Perch",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "液态玻璃新标签页：固定 / 项目 / 偶尔用三分区，磁贴自由摆放。玻璃由透镜 Lens 设计系统实时折射渲染。",
   "chrome_url_overrides": {
     "newtab": "newtab.html"

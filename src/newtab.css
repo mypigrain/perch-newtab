@@ -196,7 +196,15 @@ body.is-dragging{cursor:grabbing;user-select:none}
   border:0;background:none;cursor:pointer;font:inherit;text-align:left;color:inherit;
 }
 .sheet-tags{display:flex;gap:6px;flex-wrap:wrap}
-.sheet-tags span{font-size:12px;color:#4a5672;padding:5px 11px;border-radius:999px;background:#ffffff52}
+.sheet-tags span{
+  font-size:12px;color:#4a5672;padding:5px 11px;border-radius:999px;background:#ffffff52;
+  cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;
+  transition:opacity .15s, transform .15s var(--lg-ease-spring);
+}
+.sheet-tags span:hover{transform:translateY(-1px)}
+.sheet-tags span.dragging{opacity:.35;cursor:grabbing;transform:none}
+body.tag-dragging{cursor:grabbing;user-select:none}
+body.tag-dragging .sheet-tags span{cursor:grabbing}
 .sheet-hint{margin-left:auto;font-size:12px;color:#5c6a86;white-space:nowrap}
 .chev{display:inline-block;transition:transform var(--lg-duration-normal) var(--lg-ease-spring)}
 .sheet.open .chev{transform:rotate(180deg)}
