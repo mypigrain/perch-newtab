@@ -73,6 +73,8 @@
     <footer class="foot mono">
       <span>双击空白处新增 · 右键磁贴改大小 / 移动 / 删除 · 拖拽排序 · Ctrl K 搜索</span>
       <span class="foot-actions">
+        <button class="rst" id="importBookmarks" type="button">导入收藏夹</button>
+        <button class="rst" id="archiveBox" type="button" hidden>档案库 <span id="archCount"></span></button>
         <button class="rst" id="export" type="button">导出布局</button>
         <button class="rst" id="import" type="button">导入布局</button>
         <button class="rst" id="reset" type="button">重置</button>
@@ -83,6 +85,13 @@
   </div>
 
   <input type="file" id="importFile" accept=".json,application/json" hidden>
+
+  <div class="modal lg-surface" id="archiveDlg" data-glass="menu">
+    <h3>档案库</h3>
+    <p class="arch-hint mono">归档的项目不会出现在项目栏，恢复后磁贴原样回来。</p>
+    <div class="arch-list" id="archList"></div>
+    <div class="mact"><button class="lg-surface minibtn" id="archClose" type="button" data-glass="small">关闭</button></div>
+  </div>
 
   <div class="veil" id="veil"></div>
 
@@ -116,6 +125,7 @@
   <div class="toast" id="toast"></div>
 </div>
 
+<script src="./src/aurora.js"></script>
 <script type="module" src="./src/app.js"></script>
 </body>
 </html>

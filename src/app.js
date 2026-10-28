@@ -73,10 +73,14 @@ const SEED = {
     { id: "o6", title: "发布流水线", url: "https://ci.corp.example", icon: "layers", group: "运维工具" },
     { id: "o7", title: "权限申请", url: "https://it.corp.example/access", icon: "link", group: "运维工具" },
     { id: "o8", title: "历史版本下载", url: "https://nexus.corp.example", icon: "server", group: "历史存档" }
-  ]
+  ],
+  archived: []
 };
 
 let DB = load() || clone(SEED);
+// 老数据兼容：早期版本没有 archived
+if (!Array.isArray(DB.archived)) DB.archived = [];
+DB.occasional.forEach(o => { if (!o.group) o.group = "未分类"; });
 
 function load() {
   try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
@@ -172,7 +176,20 @@ function renderSheet(force) {
   });
 }
 
-function renderAll(force) { renderPills(force); renderPinned(force); renderProject(force); renderSheet(force); }
+function renderFooter() {
+  const box = $("archiveBox");
+  const n = DB.archived.length;
+  box.hidden = n === 0;
+  $("archCount").textContent = n ? `(${n})` : "";
+}
+
+function renderAll(force) {
+  renderPills(force);
+  renderPinned(force);
+  renderProject(force);
+  renderSheet(force);
+  renderFooter();
+}
 
 /* ============================== 打开页面 ============================== */
 function openUrl(url, title) {
@@ -307,6 +324,12 @@ document.addEventListener("click", e => {
 });
 
 document.addEventListener("contextmenu", e => {
+  const pill = e.target.closest && e.target.closest(".pill[data-proj]");
+  if (pill) {
+    e.preventDefault();
+    openProjectMenu(e, pill.dataset.proj);
+    return;
+  }
   const tile = e.target.closest && e.target.closest(".tile");
   if (!tile || !tile.dataset.id) return;
   e.preventDefault();
@@ -348,6 +371,187 @@ function doCtx(act) {
   save(); renderAll(); closeCtx();
 }
 
+/* ============================== 项目菜单 / 归档 ============================== */
+function openProjectMenu(e, id) {
+  const p = DB.projects.find(x => x.id === id);
+  if (!p) return;
+  ctxTarget = null; // 这条菜单不走磁贴那套
+  const el = $("ctx");
+  el.innerHTML = `
+    <button class="cit" data-pact="rename">重命名项目</button>
+    <button class="cit" data-pact="archive">归档「${esc(p.name)}」</button>`;
+  el.classList.add("on");
+  el.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
+  el.style.top = Math.min(e.clientY, innerHeight - 150) + "px";
+  el.querySelectorAll("[data-pact]").forEach(b => {
+    b.onclick = () => {
+      const act = b.dataset.pact;
+      closeCtx();
+      if (act === "rename") renameProject(id);
+      else if (act === "archive") archiveProject(id);
+    };
+  });
+}
+
+function renameProject(id) {
+  const p = DB.projects.find(x => x.id === id);
+  if (!p) return;
+  const name = prompt("项目名称：", p.name);
+  if (!name || !name.trim()) return;
+  p.name = name.trim().slice(0, 40);
+  save();
+  renderAll(true);
+}
+
+function archiveProject(id) {
+  const p = DB.projects.find(x => x.id === id);
+  if (!p) return;
+  if (DB.projects.length <= 1) { toast("至少要保留一个项目"); return; }
+  const tiles = DB.projectTiles[p.id] || [];
+  if (!confirm(`归档「${p.name}」？\n\n${tiles.length} 个磁贴会收进档案库，随时可以恢复。`)) return;
+  DB.archived.unshift({ id: p.id, name: p.name, archivedAt: new Date().toISOString(), tiles });
+  delete DB.projectTiles[p.id];
+  DB.projects = DB.projects.filter(x => x.id !== id);
+  if (DB.currentProject === id) DB.currentProject = DB.projects[0].id;
+  save();
+  renderAll(true);
+  toast(`已归档「${p.name}」，可在底部档案库恢复`);
+}
+
+function restoreProject(id) {
+  const i = DB.archived.findIndex(a => a.id === id);
+  if (i < 0) return;
+  const a = DB.archived[i];
+  let pid = a.id;
+  while (DB.projects.some(p => p.id === pid)) pid = uid("p");
+  DB.archived.splice(i, 1);
+  DB.projects.push({ id: pid, name: a.name });
+  DB.projectTiles[pid] = Array.isArray(a.tiles) ? a.tiles : [];
+  DB.currentProject = pid;
+  save();
+  renderAll(true);
+  renderArchive();
+  toast(`已恢复「${a.name}」`);
+}
+
+function dropArchived(id) {
+  const i = DB.archived.findIndex(a => a.id === id);
+  if (i < 0) return;
+  const a = DB.archived[i];
+  if (!confirm(`永久删除「${a.name}」？删除后无法恢复。`)) return;
+  DB.archived.splice(i, 1);
+  save();
+  renderAll(true);
+  renderArchive();
+  toast(`已删除「${a.name}」`);
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+}
+
+function renderArchive() {
+  const list = $("archList");
+  if (!DB.archived.length) {
+    list.innerHTML = `<div class="arch-empty">还没有归档的项目。右键项目标签即可归档。</div>`;
+    return;
+  }
+  list.innerHTML = DB.archived.map(a => `
+    <div class="arch-item">
+      <span class="an">${esc(a.name)}</span>
+      <span class="am mono">${(a.tiles || []).length} 个页面 · ${fmtDate(a.archivedAt)}</span>
+      <span class="aa">
+        <button class="lg-surface minibtn" data-restore="${a.id}" type="button" data-glass="small">恢复</button>
+        <button class="lg-surface minibtn" data-drop="${a.id}" type="button" data-glass="small">删除</button>
+      </span>
+    </div>`).join("");
+  list.querySelectorAll("[data-restore]").forEach(b => { b.onclick = () => restoreProject(b.dataset.restore); });
+  list.querySelectorAll("[data-drop]").forEach(b => { b.onclick = () => dropArchived(b.dataset.drop); });
+}
+
+function openArchive() {
+  renderArchive();
+  $("veil").classList.add("on");
+  $("archiveDlg").classList.add("on");
+}
+
+/* ============================== 收藏夹导入 ============================== */
+function bookmarkIcon(url) {
+  const u = url.toLowerCase();
+  if (/docs|wiki|confluence|notion|yuque/.test(u)) return "doc";
+  if (/jira|board|kanban/.test(u)) return "grid";
+  if (/gitlab|github|bitbucket|code/.test(u)) return "code";
+  if (/mail|outlook|gmail|exmail/.test(u)) return "mail";
+  if (/grafana|monitor|dashboard|kibana|metric/.test(u)) return "gauge";
+  if (/jenkins|pipeline|deploy|build/.test(u)) return "layers";
+  if (/calendar|schedule/.test(u)) return "clock";
+  return "link";
+}
+
+function collectBookmarks(nodes, group, out) {
+  for (const n of nodes) {
+    if (n.url) {
+      if (/^https?:\/\//i.test(n.url)) out.push({ title: n.title || n.url, url: n.url, group: group || "未分类" });
+    } else if (n.children) {
+      collectBookmarks(n.children, group || n.title || "未命名", out);
+    }
+  }
+}
+
+async function importBookmarks() {
+  const api = globalThis.chrome && chrome.bookmarks;
+  if (!api || !api.getTree) { toast("只有在扩展里才能读取收藏夹"); return; }
+
+  let tree;
+  try { tree = await api.getTree(); }
+  catch { toast("读取收藏夹失败，检查扩展是否被撤销了书签权限"); return; }
+
+  const all = [];
+  collectBookmarks(tree, "", all);
+  if (!all.length) { toast("收藏夹是空的"); return; }
+
+  const existing = new Set();
+  const remember = t => { if (t && t.url) existing.add(t.url); };
+  DB.pinned.forEach(remember);
+  DB.occasional.forEach(remember);
+  Object.values(DB.projectTiles).forEach(list => list.forEach(remember));
+
+  const fresh = [];
+  const seenUrl = new Set();
+  for (const b of all) {
+    if (existing.has(b.url) || seenUrl.has(b.url)) continue;
+    seenUrl.add(b.url);
+    fresh.push(b);
+  }
+  if (!fresh.length) { toast(`${all.length} 条书签都已经在页面上了`); return; }
+
+  const MAX = 300;
+  const take = fresh.slice(0, MAX);
+  const extra = fresh.length - take.length;
+  const ok = confirm(
+    `收藏夹共 ${all.length} 条，其中 ${fresh.length} 条还没有出现在页面上。\n\n` +
+    `导入到「偶尔用」并按文件夹分组？` +
+    (extra ? `\n（本次先导入 ${MAX} 条，剩余 ${extra} 条可以再点一次继续）` : "")
+  );
+  if (!ok) return;
+
+  take.forEach(b => {
+    DB.occasional.push({
+      id: uid("b"),
+      title: (b.title || b.url).slice(0, 60),
+      url: b.url,
+      icon: bookmarkIcon(b.url),
+      group: (b.group || "未分类").slice(0, 20)
+    });
+  });
+  save();
+  renderAll(true);
+  $("sheet").classList.add("open");
+  toast(`已导入 ${take.length} 条书签到「偶尔用」`);
+}
+
 /* ============================== 命令面板 ============================== */
 let palItems = [];
 let palSel = 0;
@@ -364,6 +568,7 @@ function closeAll() {
   $("veil").classList.remove("on");
   $("palette").classList.remove("on");
   $("modal").classList.remove("on");
+  $("archiveDlg").classList.remove("on");
   closeCtx();
 }
 function renderPalette(q) {
@@ -490,8 +695,18 @@ function normalizeLayout(raw) {
     })
     .filter(Boolean);
 
+  const archived = (Array.isArray(src.archived) ? src.archived : [])
+    .map(a => {
+      if (!a || typeof a !== "object") return null;
+      const name = typeof a.name === "string" && a.name.trim() ? a.name.trim().slice(0, 40) : "未命名项目";
+      const tiles = (Array.isArray(a.tiles) ? a.tiles : []).map(t => cleanTile(t, used)).filter(Boolean);
+      const archivedAt = typeof a.archivedAt === "string" ? a.archivedAt : new Date().toISOString();
+      return { id: typeof a.id === "string" && a.id ? a.id : uid("a"), name, archivedAt, tiles };
+    })
+    .filter(Boolean);
+
   const currentProject = projects.some(p => p.id === src.currentProject) ? src.currentProject : projects[0].id;
-  return { currentProject, projects, pinned, projectTiles, occasional };
+  return { currentProject, projects, pinned, projectTiles, occasional, archived };
 }
 
 function exportLayout() {
@@ -576,6 +791,9 @@ function bind() {
     if (file) importLayout(file);
     e.target.value = ""; // 允许连续导入同一个文件
   });
+  $("importBookmarks").onclick = importBookmarks;
+  $("archiveBox").onclick = openArchive;
+  $("archClose").onclick = closeAll;
   document.addEventListener("keydown", e => {
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openPalette(); }
     if (e.key === "Escape") closeAll();
@@ -586,74 +804,25 @@ function bind() {
     const g = $(id);
     g.addEventListener("dblclick", e => { if (e.target === g) openAdd(id === "grid-pinned" ? "pinned" : "project"); });
   });
-  window.addEventListener("resize", () => { closeCtx(); paintFallback(); });
+  window.addEventListener("resize", () => { closeCtx(); });
 }
 
-/* ============================== 背景：秒开的 Canvas2D 极光 ============================== */
-const AURORA = ["#d3e8e3", "#badde8", "#9db7dc", "#929ee0", "#d3b4d2", "#eccbc1"];
+/* ============================== 背景 ============================== */
+/* 极光画法在 src/aurora.js（经典脚本）：它在解析阶段就把背景画到兜底画布上，
+   保证首帧不是空白，同时把画法暴露出来给 WebGL 渲染器当 artwork 复用。 */
+const aurora = window.LensAurora;
+if (!aurora) console.warn("[lens] aurora.js 没有加载，背景会退化成纯色");
+const paintAurora = aurora ? aurora.paint : () => {};
+const paintFallback = aurora ? aurora.paintFallback : () => {};
 
-function paintAurora(ctx, { width: w, height: h, dpr }) {
-  const g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, AURORA[0]);
-  g.addColorStop(.5, AURORA[1]);
-  g.addColorStop(1, AURORA[5]);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-
-  const ribbon = (o, c1, c2) => {
-    const contour = new Path2D();
-    contour.moveTo(-w * .1, h * (.98 + o));
-    contour.bezierCurveTo(w * .13, h * (.39 + o), w * .48, h * (.86 + o), w * 1.1, h * (-.32 + o));
-    const shape = new Path2D(contour);
-    shape.lineTo(w * 1.15, h * 1.4);
-    shape.lineTo(-w * .1, h * 1.4);
-    shape.closePath();
-    const f = ctx.createLinearGradient(w * .05, h * .1, w * .87, h * .92);
-    f.addColorStop(0, c1);
-    f.addColorStop(.48, c2);
-    f.addColorStop(1, AURORA[5]);
-    ctx.save();
-    ctx.shadowColor = "#38486830";
-    ctx.shadowBlur = 27 * dpr;
-    ctx.shadowOffsetY = -7 * dpr;
-    ctx.fillStyle = f;
-    ctx.fill(shape);
-    ctx.restore();
-    ctx.save();
-    ctx.clip(shape);
-    ctx.filter = `blur(${15 * dpr}px)`;
-    ctx.strokeStyle = "#ffffff45";
-    ctx.lineWidth = 37 * dpr;
-    ctx.stroke(contour);
-    ctx.filter = "none";
-    ctx.strokeStyle = "#ffffff25";
-    ctx.lineWidth = 1.2 * dpr;
-    ctx.stroke(contour);
-    ctx.restore();
-  };
-
-  ribbon(-.31, AURORA[1], AURORA[2]);
-  ribbon(-.10, AURORA[2], AURORA[3]);
-  ribbon(.18, AURORA[3], AURORA[4]);
-  ribbon(.44, AURORA[4], AURORA[5]);
-
-  const glow = ctx.createRadialGradient(w * .12, h * .08, 0, w * .12, h * .08, w * .85);
-  glow.addColorStop(0, "#ffffff55");
-  glow.addColorStop(1, "#ffffff00");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-}
-
-function paintFallback() {
-  const canvas = $("fallback");
-  if (!canvas || document.getElementById("stage").classList.contains("webgl-ready")) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-  canvas.width = Math.round(innerWidth * dpr);
-  canvas.height = Math.round(innerHeight * dpr);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  paintAurora(ctx, { width: innerWidth, height: innerHeight, dpr });
+/** WebGL 出第一帧之后再淡出兜底画布，避免"CSS 玻璃 → 真玻璃"之间闪一帧空白。 */
+function fadeFallback() {
+  const c = $("fallback");
+  if (!c) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    c.style.opacity = "0";
+    setTimeout(() => { c.style.display = "none"; }, 280);
+  }));
 }
 
 /* ============================== 玻璃：空闲时接管 ============================== */
@@ -666,33 +835,24 @@ function startGlass() {
       artwork: paintAurora,
       material: "thick",
       motion: !matchMedia("(prefers-reduced-motion: reduce)").matches,
-      audio: { enabled: false },
-      onFallback() { canvasSafeHide(); }
+      audio: { enabled: false }
+      // 注意：WebGL 失败时不要隐藏兜底画布——它是唯一的背景
     });
     window.lensSystem = system;
   } catch (err) {
-    // 没有 WebGL2：保持 CSS 玻璃兜底，功能不受影响
+    // 没有 WebGL2：保持 Canvas2D 极光 + CSS 玻璃，功能不受影响
     console.warn("[lens] WebGL 不可用，使用 CSS 玻璃兜底", err);
-    canvasSafeHide();
+    return;
   }
 
-  function canvasSafeHide() {
-    const c = $("fallback");
-    if (c) c.style.display = "none";
-  }
-
-  // 渲染器就绪后会加上 webgl-ready，此时可以关掉 Canvas2D 兜底
-  if (system) {
-    const check = () => {
-      if (stage.classList.contains("webgl-ready")) { canvasSafeHide(); return true; }
-      return false;
-    };
-    if (!check()) {
-      const mo = new MutationObserver(() => { if (check()) mo.disconnect(); });
-      mo.observe(stage, { attributes: true, attributeFilter: ["class"] });
-      setTimeout(() => mo.disconnect(), 6000);
-    }
-  }
+  // 渲染器就绪后会加上 webgl-ready
+  if (stage.classList.contains("webgl-ready")) { fadeFallback(); return; }
+  const mo = new MutationObserver(() => {
+    if (stage.classList.contains("webgl-ready")) { mo.disconnect(); fadeFallback(); }
+  });
+  mo.observe(stage, { attributes: true, attributeFilter: ["class"] });
+  // 兜底：6 秒内没就绪就保持现状，别让观察器一直挂着
+  setTimeout(() => mo.disconnect(), 6000);
 }
 
 /* ============================== 启动 ============================== */
