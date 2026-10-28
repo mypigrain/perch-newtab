@@ -5,6 +5,25 @@
 
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
+
+/* ---------------- 开场遮罩 ----------------
+   目的：把「CSS 兜底玻璃 → WebGL 真玻璃」的交接整个盖住。
+   做法：一层渐变色盖住全屏，等渲染器真正画出第一帧后，
+        用 mask 在左上角打一个圆洞并让它扩散到右下角，把页面"擦"出来。 */
+@property --hole{syntax:"<length>";inherits:false;initial-value:0px}
+
+.intro{
+  position:fixed;inset:0;z-index:100;pointer-events:none;
+  background:linear-gradient(135deg,#d3e8e3 0%,#badde8 34%,#9db7dc 62%,#c9b6d8 82%,#eccbc1 100%);
+  -webkit-mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 1.5px));
+  mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 1.5px));
+  transition:--hole .62s cubic-bezier(.22,1,.36,1), opacity .22s ease .6s;
+}
+body.intro-done .intro{--hole:170vmax;opacity:0}
+body.intro-gone .intro{display:none}
+@media (prefers-reduced-motion:reduce){
+  .intro{transition:none}
+}
 body{
   background:#cfdeed;
   color:#1d2433;

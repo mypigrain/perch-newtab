@@ -10,6 +10,10 @@
 </head>
 <body>
 
+<!-- 开场遮罩：等玻璃真的画出来，再从左上角用圆把它擦掉。
+     没有它的话，CPU 兜底玻璃 → WebGL 玻璃的交接会被看见。 -->
+<div class="intro" id="intro" aria-hidden="true"></div>
+
 <div class="stage" id="stage">
   <!-- 秒开用的 Canvas2D 极光；WebGL 就绪后隐藏 -->
   <canvas class="fallback" id="fallback" aria-hidden="true"></canvas>

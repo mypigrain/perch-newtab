@@ -1123,6 +1123,16 @@ const paintFallback = aurora ? aurora.paintFallback : () => {};
  *  如果那时候就把 CSS 底色抽掉，磁贴会先变空一帧再变玻璃——就是闪一下。
  *  renderer.lastTime 在第一帧真正画完时才 > 0，用它当信号最准。 */
 let glassCommitted = false;
+let introDone = false;
+
+/** 擦掉开场遮罩：左上角一个圆扩散到右下角，把已经就绪的页面露出来。 */
+function finishIntro() {
+  if (introDone) return;
+  introDone = true;
+  document.body.classList.add("intro-done");
+  setTimeout(() => document.body.classList.add("intro-gone"), 1000);
+}
+
 function commitGlass() {
   if (glassCommitted) return;
   glassCommitted = true;
@@ -1138,8 +1148,17 @@ function whenGlassDrawn() {
   const started = performance.now();
   const tick = () => {
     if (glassCommitted) return;
-    const drawn = renderer && renderer.lastTime > 0;
-    if (drawn || performance.now() - started > 1200) { commitGlass(); return; }
+    if (renderer && renderer.lastTime > 0) {
+      // 第一帧真的画完了：切玻璃 + 揭开遮罩，同一帧完成，中间没有可看见的空档
+      commitGlass();
+      finishIntro();
+      return;
+    }
+    if (performance.now() - started > 1500) {
+      // 等太久（驱动慢/上下文恢复中）：照常揭开，保持 CSS 兜底玻璃，别把人挡在外面
+      finishIntro();
+      return;
+    }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -1162,6 +1181,7 @@ function startGlass() {
   } catch (err) {
     // 没有 WebGL2：保持 Canvas2D 极光 + CSS 玻璃，功能不受影响
     console.warn("[lens] WebGL 不可用，使用 CSS 玻璃兜底", err);
+    finishIntro();
     return;
   }
 
@@ -1186,3 +1206,6 @@ paintFallback();
 // 第一帧画完就立刻上 WebGL：页面是本地文件，没必要等空闲——
 // 等空闲会让"CSS 玻璃兜底"的状态多停留几百毫秒，看起来就像闪一下。
 requestAnimationFrame(() => requestAnimationFrame(startGlass));
+
+// 保险：不管 WebGL 出什么岔子，遮罩最迟 2.2 秒也要揭开
+setTimeout(finishIntro, 2200);
