@@ -93,6 +93,22 @@
     <div class="mact"><button class="lg-surface minibtn" id="archClose" type="button" data-glass="small">关闭</button></div>
   </div>
 
+  <div class="modal lg-surface" id="bmDlg" data-glass="menu">
+    <div class="bm-head">
+      <h3>导入收藏夹</h3>
+      <span class="bm-count mono" id="bmCount">0</span>
+      <span class="bm-extra mono" id="bmExtra"></span>
+    </div>
+    <div class="bm-list" id="bmList"></div>
+    <div class="bm-foot">
+      <span class="bm-flabel">导入到</span>
+      <select id="bmDest"></select>
+      <span class="bm-spacer"></span>
+      <button class="lg-surface minibtn" id="bmCancel" type="button" data-glass="small">取消</button>
+      <button class="lg-surface minibtn pri" id="bmOk" type="button" data-glass="small">导入</button>
+    </div>
+  </div>
+
   <div class="veil" id="veil"></div>
 
   <div class="palette lg-surface" id="palette" data-glass="menu">
@@ -114,6 +130,9 @@
         <option value="project">当前项目区（跟项目走）</option>
         <option value="occasional">偶尔用（收进抽屉）</option>
       </select>
+    </label>
+    <label class="fld" id="mGroupWrap" hidden><span>分组</span>
+      <select id="mGroup"></select>
     </label>
     <div class="mact">
       <button class="lg-surface minibtn" id="mCancel" type="button" data-glass="small">取消</button>

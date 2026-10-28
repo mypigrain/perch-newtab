@@ -15,9 +15,12 @@ body{
 
 /* 整页就是一块玻璃舞台。
    高度锁定在视口：抽屉展开只改变内部滚动高度，不触发画布 resize，
-   否则不透明的 WebGL 画布会在重置尺寸的那一帧闪黑。 */
+   否则不透明的 WebGL 画布会在重置尺寸的那一帧闪黑。
+   isolation:isolate 必须有：兜底画布是 z-index:-1 的负层级子元素，
+   父元素不建立层叠上下文时它会被 #stage 自己的背景盖住（开新标签页的第一帧就是这个现象）。 */
 #stage{
   position:relative;
+  isolation:isolate;
   height:100vh;
   border-radius:0;
   overflow:hidden;
@@ -208,6 +211,7 @@ body.is-dragging{cursor:grabbing;user-select:none}
 .modal.on{display:block}
 .modal h3{margin:0 0 20px;font-size:19px;font-weight:600;letter-spacing:-.01em}
 .fld{display:grid;gap:7px;margin-bottom:15px}
+.fld[hidden]{display:none!important} /* .fld 的 display 会盖掉 [hidden] 的 UA 样式 */
 .fld>span{font-size:12px;color:#4a5672}
 .fld input,.fld select{
   width:100%;padding:11px 14px;border:0;border-radius:14px;outline:none;
@@ -226,6 +230,42 @@ body.is-dragging{cursor:grabbing;user-select:none}
 .arch-item .aa{margin-left:auto;display:flex;gap:6px;flex:none}
 .arch-item .minibtn{height:30px;padding:0 12px;font-size:12px}
 .arch-empty{padding:16px 4px;color:#5c6a86;font-size:13px}
+
+/* ---------------- 收藏夹导入 ---------------- */
+#bmDlg{width:min(680px,94vw);top:11vh;padding:22px 24px}
+.bm-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.bm-head h3{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
+.bm-count{font-size:12px;color:#2875ed}
+.bm-extra{font-size:11px;color:#7b879b}
+.bm-list{
+  max-height:min(430px,48vh);overflow:auto;display:grid;gap:12px;
+  margin-bottom:16px;padding-right:6px;
+}
+.bm-group{display:grid;gap:1px}
+.bm-ghead{
+  display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:10px;
+  font-size:12px;font-weight:600;color:#3f4d6b;cursor:pointer;
+  position:sticky;top:0;background:#eef2f8;z-index:1;
+}
+.bm-n{font-weight:400;color:#7b879b}
+.bm-item{
+  display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:10px;
+  cursor:pointer;font-size:13px;
+}
+.bm-item:hover{background:#ffffff8a}
+.bm-item .lg-icon{width:16px;height:16px;stroke-width:1.6;color:#3f5573;flex:none}
+.bm-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#243651}
+.bm-u{margin-left:auto;font-size:10.5px;color:#7b879b;flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bm-list input[type="checkbox"]{accent-color:#2875ed;flex:none;width:15px;height:15px;margin:0;cursor:pointer}
+.bm-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bm-flabel{font-size:12px;color:#4a5672;flex:none}
+.bm-foot select{
+  padding:8px 12px;border:0;border-radius:12px;outline:none;cursor:pointer;
+  background:#ffffff7a;color:#1d2433;font:400 13px/1.3 var(--lg-font-family);
+  box-shadow:inset 0 0 0 1px #ffffff8c;max-width:100%;
+}
+.bm-foot select:focus{box-shadow:inset 0 0 0 2px #2875ed66}
+.bm-spacer{flex:1}
 
 .ctx{position:fixed;z-index:7;min-width:180px;padding:8px;border-radius:20px;display:none}
 .ctx.on{display:block}

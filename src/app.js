@@ -163,7 +163,8 @@ function renderSheet(force) {
     if (!groups.has(o.group)) groups.set(o.group, []);
     groups.get(o.group).push(o);
   });
-  $("sheetTags").innerHTML = [...groups.keys()].map(g => `<span>${esc(g)}</span>`).join("");
+  $("sheetTags").innerHTML = [...groups.keys()]
+    .map(g => `<span data-group="${esc(g)}" title="右键可重命名 / 删除分组">${esc(g)}</span>`).join("");
   $("sheetin").innerHTML = [...groups.entries()].map(([g, items]) => `
     <div class="sgroup"><div class="sgl mono">${esc(g)}</div><div class="sitems">
       ${items.map(o => `<button class="sitem lg-surface" data-occ="${o.id}" type="button" data-glass="small">${icon(o.icon)}<span>${esc(o.title)}</span></button>`).join("")}
@@ -324,6 +325,18 @@ document.addEventListener("click", e => {
 });
 
 document.addEventListener("contextmenu", e => {
+  const sitem = e.target.closest && e.target.closest(".sitem");
+  if (sitem && sitem.dataset.occ) {
+    e.preventDefault();
+    openOccMenu(e, sitem.dataset.occ);
+    return;
+  }
+  const tag = e.target.closest && e.target.closest("#sheetTags span");
+  if (tag && tag.dataset.group) {
+    e.preventDefault();
+    openGroupMenu(e, tag.dataset.group);
+    return;
+  }
   const pill = e.target.closest && e.target.closest(".pill[data-proj]");
   if (pill) {
     e.preventDefault();
@@ -500,7 +513,13 @@ function collectBookmarks(nodes, group, out) {
   }
 }
 
-async function importBookmarks() {
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch { return ""; }
+}
+
+const bm = { items: [], sel: new Set(), extra: 0 };
+
+async function openBookmarkDialog() {
   const api = globalThis.chrome && chrome.bookmarks;
   if (!api || !api.getTree) { toast("只有在扩展里才能读取收藏夹"); return; }
 
@@ -517,6 +536,7 @@ async function importBookmarks() {
   DB.pinned.forEach(remember);
   DB.occasional.forEach(remember);
   Object.values(DB.projectTiles).forEach(list => list.forEach(remember));
+  DB.archived.forEach(a => (a.tiles || []).forEach(remember));
 
   const fresh = [];
   const seenUrl = new Set();
@@ -527,29 +547,194 @@ async function importBookmarks() {
   }
   if (!fresh.length) { toast(`${all.length} 条书签都已经在页面上了`); return; }
 
-  const MAX = 300;
-  const take = fresh.slice(0, MAX);
-  const extra = fresh.length - take.length;
-  const ok = confirm(
-    `收藏夹共 ${all.length} 条，其中 ${fresh.length} 条还没有出现在页面上。\n\n` +
-    `导入到「偶尔用」并按文件夹分组？` +
-    (extra ? `\n（本次先导入 ${MAX} 条，剩余 ${extra} 条可以再点一次继续）` : "")
-  );
-  if (!ok) return;
+  const MAX = 400;
+  bm.items = fresh.slice(0, MAX);
+  bm.extra = fresh.length - bm.items.length;
+  bm.sel = new Set(bm.items.map((_, i) => i));
 
-  take.forEach(b => {
-    DB.occasional.push({
-      id: uid("b"),
-      title: (b.title || b.url).slice(0, 60),
-      url: b.url,
-      icon: bookmarkIcon(b.url),
-      group: (b.group || "未分类").slice(0, 20)
+  renderBookmarkDialog();
+  $("veil").classList.add("on");
+  $("bmDlg").classList.add("on");
+}
+
+function renderBookmarkDialog() {
+  // 目标下拉：固定区 / 每个项目 / 每个已有分组 / 新建分组
+  const opts = ['<option value="pinned">固定区</option>'];
+  DB.projects.forEach(p => opts.push(`<option value="project:${p.id}">项目 · ${esc(p.name)}</option>`));
+  [...new Set(DB.occasional.map(o => o.group))]
+    .forEach(g => opts.push(`<option value="occ:${esc(g)}">偶尔用 · ${esc(g)}</option>`));
+  opts.push('<option value="occ:__new__">偶尔用 · 新建分组…</option>');
+  const dest = $("bmDest");
+  dest.innerHTML = opts.join("");
+  dest.value = `project:${DB.currentProject}`;
+
+  $("bmExtra").textContent = bm.extra > 0 ? `（只列出前 ${bm.items.length} 条，还有 ${bm.extra} 条可以再导一次）` : "";
+
+  const byFolder = new Map();
+  bm.items.forEach((b, i) => {
+    const g = b.group || "未分类";
+    if (!byFolder.has(g)) byFolder.set(g, []);
+    byFolder.get(g).push(i);
+  });
+
+  $("bmList").innerHTML = [...byFolder.entries()].map(([folder, idxs]) => `
+    <div class="bm-group">
+      <label class="bm-ghead">
+        <input type="checkbox" ${idxs.every(i => bm.sel.has(i)) ? "checked" : ""}>
+        <span>${esc(folder)}</span><span class="bm-n mono">${idxs.length}</span>
+      </label>
+      ${idxs.map(i => `
+        <label class="bm-item">
+          <input type="checkbox" data-idx="${i}" ${bm.sel.has(i) ? "checked" : ""}>
+          ${icon(bookmarkIcon(bm.items[i].url))}
+          <span class="bm-t">${esc(bm.items[i].title)}</span>
+          <span class="bm-u mono">${esc(hostOf(bm.items[i].url))}</span>
+        </label>`).join("")}
+    </div>`).join("");
+
+  $("bmList").querySelectorAll(".bm-group").forEach(groupEl => {
+    const head = groupEl.querySelector(".bm-ghead input");
+    const boxes = [...groupEl.querySelectorAll(".bm-item input")];
+    head.onchange = () => {
+      boxes.forEach(box => {
+        box.checked = head.checked;
+        const i = Number(box.dataset.idx);
+        head.checked ? bm.sel.add(i) : bm.sel.delete(i);
+      });
+      updateBmCount();
+    };
+    boxes.forEach(box => {
+      box.onchange = () => {
+        const i = Number(box.dataset.idx);
+        box.checked ? bm.sel.add(i) : bm.sel.delete(i);
+        head.checked = boxes.every(b => b.checked);
+        updateBmCount();
+      };
     });
+  });
+  updateBmCount();
+}
+
+function updateBmCount() {
+  $("bmCount").textContent = `已选 ${bm.sel.size} / ${bm.items.length}`;
+}
+
+function confirmBookmarks() {
+  if (!bm.sel.size) { toast("至少选一个"); return; }
+  const dest = $("bmDest").value;
+  let target;
+  if (dest === "pinned") target = { kind: "pinned" };
+  else if (dest.startsWith("project:")) target = { kind: "project", id: dest.slice(8) };
+  else {
+    let g = dest.slice(4);
+    if (g === "__new__") {
+      const name = prompt("新分组名称：", "");
+      if (!name || !name.trim()) return;
+      g = name.trim().slice(0, 20);
+    }
+    target = { kind: "occ", group: g };
+  }
+
+  const picked = [...bm.sel].sort((a, b) => a - b).map(i => bm.items[i]);
+  picked.forEach(b => {
+    const t = { id: uid("b"), title: (b.title || b.url).slice(0, 60), url: b.url, icon: bookmarkIcon(b.url), size: "s" };
+    if (target.kind === "pinned") DB.pinned.push(t);
+    else if (target.kind === "project") (DB.projectTiles[target.id] ||= []).push(t);
+    else DB.occasional.push({ ...t, group: target.group });
   });
   save();
   renderAll(true);
-  $("sheet").classList.add("open");
-  toast(`已导入 ${take.length} 条书签到「偶尔用」`);
+  if (target.kind === "occ") $("sheet").classList.add("open");
+  const where = target.kind === "pinned" ? "固定区"
+    : target.kind === "project" ? `项目「${(DB.projects.find(p => p.id === target.id) || {}).name || ""}」`
+      : `偶尔用 · ${target.group}`;
+  closeAll();
+  toast(`已把 ${picked.length} 条书签导入${where}`);
+}
+
+/* ============================== 偶尔用的分组 ============================== */
+function allGroups() {
+  return [...new Set(DB.occasional.map(o => o.group))];
+}
+
+function moveToGroup(id, group) {
+  const item = DB.occasional.find(o => o.id === id);
+  if (!item) return;
+  item.group = group;
+  save();
+  renderAll(true);
+  toast(`已移到「${group}」`);
+}
+
+function renameGroup(from) {
+  const name = prompt("分组名：", from);
+  if (!name || !name.trim() || name.trim() === from) return;
+  const to = name.trim().slice(0, 20);
+  DB.occasional.forEach(o => { if (o.group === from) o.group = to; });
+  save();
+  renderAll(true);
+}
+
+function dropGroup(group) {
+  const n = DB.occasional.filter(o => o.group === group).length;
+  if (!confirm(`删除分组「${group}」？\n组内 ${n} 个页面会移到「未分类」，不会丢。`)) return;
+  DB.occasional.forEach(o => { if (o.group === group) o.group = "未分类"; });
+  save();
+  renderAll(true);
+}
+
+function openOccMenu(e, id) {
+  const item = DB.occasional.find(o => o.id === id);
+  if (!item) return;
+  ctxTarget = null;
+  const others = allGroups().filter(g => g !== item.group);
+  const el = $("ctx");
+  el.innerHTML =
+    others.map(g => `<button class="cit" data-move="${esc(g)}">移到「${esc(g)}」</button>`).join("") +
+    `<button class="cit" data-move="__new__">移到新分组…</button>` +
+    `<div class="sep"></div><button class="cit danger" data-del="1">删除这一项</button>`;
+  el.classList.add("on");
+  el.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
+  el.style.top = Math.min(e.clientY, innerHeight - 250) + "px";
+  el.querySelectorAll("[data-move]").forEach(b => {
+    b.onclick = () => {
+      let g = b.dataset.move;
+      closeCtx();
+      if (g === "__new__") {
+        const name = prompt("新分组名称：", "");
+        if (!name || !name.trim()) return;
+        g = name.trim().slice(0, 20);
+      }
+      moveToGroup(id, g);
+    };
+  });
+  el.querySelector("[data-del]").onclick = () => {
+    closeCtx();
+    const i = DB.occasional.findIndex(o => o.id === id);
+    if (i >= 0) DB.occasional.splice(i, 1);
+    save();
+    renderAll(true);
+    toast("已删除");
+  };
+}
+
+function openGroupMenu(e, group) {
+  ctxTarget = null;
+  const el = $("ctx");
+  el.innerHTML =
+    `<button class="cit" data-gact="rename">重命名分组</button>` +
+    `<button class="cit danger" data-gact="del">删除分组</button>`;
+  el.classList.add("on");
+  el.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
+  el.style.top = Math.min(e.clientY, innerHeight - 140) + "px";
+  el.querySelectorAll("[data-gact]").forEach(b => {
+    b.onclick = () => {
+      const act = b.dataset.gact;
+      closeCtx();
+      if (act === "rename") renameGroup(group);
+      else dropGroup(group);
+    };
+  });
 }
 
 /* ============================== 命令面板 ============================== */
@@ -569,6 +754,7 @@ function closeAll() {
   $("palette").classList.remove("on");
   $("modal").classList.remove("on");
   $("archiveDlg").classList.remove("on");
+  $("bmDlg").classList.remove("on");
   closeCtx();
 }
 function renderPalette(q) {
@@ -614,7 +800,20 @@ function openAdd(zone) {
   $("mTitle").value = "";
   $("mUrl").value = "";
   $("mZone").value = zone === "pinned" ? "pinned" : "project";
+  syncGroupField();
   setTimeout(() => $("mTitle").focus(), 40);
+}
+
+/** 「偶尔用」才需要选分组，其余分区把分组字段藏起来。 */
+function syncGroupField() {
+  const isOcc = $("mZone").value === "occasional";
+  $("mGroupWrap").hidden = !isOcc;
+  if (!isOcc) return;
+  const groups = allGroups();
+  $("mGroup").innerHTML =
+    groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("") +
+    `<option value="__new__">＋ 新建分组…</option>`;
+  if (!groups.length) $("mGroup").value = "__new__";
 }
 function submitAdd() {
   const title = $("mTitle").value.trim();
@@ -626,7 +825,15 @@ function submitAdd() {
   const t = { id: "t" + Date.now(), title, url, icon: NEW_ICONS[Math.floor(Math.random() * NEW_ICONS.length)], size: "s" };
   if (zone === "pinned") DB.pinned.push(t);
   else if (zone === "project") (DB.projectTiles[DB.currentProject] ||= []).push(t);
-  else DB.occasional.push({ id: t.id, title, url, icon: t.icon, group: "新收起" });
+  else {
+    let group = $("mGroup").value;
+    if (!group || group === "__new__") {
+      const name = prompt("新分组名称：", "未分类");
+      if (!name || !name.trim()) return;
+      group = name.trim().slice(0, 20);
+    }
+    DB.occasional.push({ ...t, group });
+  }
   save(); closeAll(); renderAll(); toast(`已添加「${title}」`);
 }
 function addProject() {
@@ -791,7 +998,10 @@ function bind() {
     if (file) importLayout(file);
     e.target.value = ""; // 允许连续导入同一个文件
   });
-  $("importBookmarks").onclick = importBookmarks;
+  $("importBookmarks").onclick = openBookmarkDialog;
+  $("bmCancel").onclick = closeAll;
+  $("bmOk").onclick = confirmBookmarks;
+  $("mZone").addEventListener("change", syncGroupField);
   $("archiveBox").onclick = openArchive;
   $("archClose").onclick = closeAll;
   document.addEventListener("keydown", e => {
@@ -863,8 +1073,6 @@ renderAll();
 bind();
 paintFallback();
 
-if ("requestIdleCallback" in window) {
-  requestIdleCallback(startGlass, { timeout: 700 });
-} else {
-  setTimeout(startGlass, 180);
-}
+// 第一帧画完就立刻上 WebGL：页面是本地文件，没必要等空闲——
+// 等空闲会让"CSS 玻璃兜底"的状态多停留几百毫秒，看起来就像闪一下。
+requestAnimationFrame(() => requestAnimationFrame(startGlass));
