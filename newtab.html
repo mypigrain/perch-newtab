@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>新标签页</title>
+<link rel="stylesheet" href="./vendor/lens/tokens.css">
+<link rel="stylesheet" href="./vendor/lens/components.css">
+<link rel="stylesheet" href="./src/newtab.css">
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <!-- 秒开用的 Canvas2D 极光；WebGL 就绪后隐藏 -->
+  <canvas class="fallback" id="fallback" aria-hidden="true"></canvas>
+
+  <div class="shell">
+
+    <header class="top">
+      <div class="brand"><span class="brand-zh">透镜</span> <span class="brand-en">Lens</span></div>
+      <div class="clock">
+        <div class="clock-t" id="clockT">--:--</div>
+        <div class="clock-d mono" id="clockD">--</div>
+      </div>
+    </header>
+
+    <div class="searchrow">
+      <button class="search lg-surface" id="searchBtn" type="button" data-glass="pill" aria-label="搜索页面">
+        <svg class="lg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="search-ph">搜索页面、网址或项目…</span>
+        <span class="search-k mono">Ctrl K</span>
+      </button>
+      <button class="lg-surface addbtn" id="addBtn" type="button" data-glass="small">
+        <svg class="lg-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>新增</span>
+      </button>
+    </div>
+
+    <section class="zone">
+      <div class="zhead">
+        <span class="mono zlabel">fixed · 固定</span>
+        <span class="zhint">每天都在用 · 位置永不变</span>
+        <div class="zactions">
+          <button class="lg-surface minibtn" id="openAllPinned" type="button" data-glass="small">打开全部</button>
+          <button class="lg-surface minibtn" data-add="pinned" type="button" data-glass="small">＋</button>
+        </div>
+      </div>
+      <div class="grid" id="grid-pinned"></div>
+    </section>
+
+    <section class="zone">
+      <div class="zhead">
+        <span class="mono zlabel">project · 项目</span>
+        <div class="pills" id="pills"></div>
+        <div class="zactions">
+          <button class="lg-surface minibtn" id="openAll" type="button" data-glass="small">打开全部</button>
+          <button class="lg-surface minibtn" data-add="project" type="button" data-glass="small">＋</button>
+        </div>
+      </div>
+      <div class="grid" id="grid-project"></div>
+    </section>
+
+    <section class="sheet lg-surface" id="sheet" data-glass="panel">
+      <button class="sheeth" id="sheeth" type="button">
+        <span class="mono zlabel">occasional · 偶尔用</span>
+        <span class="sheet-tags" id="sheetTags"></span>
+        <span class="sheet-hint">平时收起，用到再展开 <span class="chev">▾</span></span>
+      </button>
+      <div class="sheetb" id="sheetb"><div class="sheetin" id="sheetin"></div></div>
+    </section>
+
+    <footer class="foot mono">
+      <span>双击空白处新增 · 右键磁贴改大小 / 移动 / 删除 · 拖拽排序 · Ctrl K 搜索</span>
+      <span class="rst" id="reset">重置</span>
+    </footer>
+
+  </div>
+
+  <div class="veil" id="veil"></div>
+
+  <div class="palette lg-surface" id="palette" data-glass="menu">
+    <div class="pal-in">
+      <svg class="lg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="palInput" placeholder="搜索页面、网址或项目名…" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="pal-res" id="palRes"></div>
+    <div class="pal-foot mono"><span>↑↓ 选择</span><span>Enter 打开</span><span>Esc 关闭</span></div>
+  </div>
+
+  <div class="modal lg-surface" id="modal" data-glass="menu">
+    <h3>新增磁贴</h3>
+    <label class="fld"><span>名称</span><input id="mTitle" placeholder="例如：堡垒机"></label>
+    <label class="fld"><span>网址</span><input id="mUrl" placeholder="https://…" spellcheck="false"></label>
+    <label class="fld"><span>放到哪里</span>
+      <select id="mZone">
+        <option value="pinned">固定区（每天都用）</option>
+        <option value="project">当前项目区（跟项目走）</option>
+        <option value="occasional">偶尔用（收进抽屉）</option>
+      </select>
+    </label>
+    <div class="mact">
+      <button class="lg-surface minibtn" id="mCancel" type="button" data-glass="small">取消</button>
+      <button class="lg-surface minibtn pri" id="mOk" type="button" data-glass="small">添加</button>
+    </div>
+  </div>
+
+  <div class="ctx lg-surface" id="ctx" data-glass="menu"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
