@@ -1130,7 +1130,7 @@ function finishIntro() {
   if (introDone) return;
   introDone = true;
   document.body.classList.add("intro-done");
-  setTimeout(() => document.body.classList.add("intro-gone"), 1000);
+  setTimeout(() => document.body.classList.add("intro-gone"), 1600);
 }
 
 function commitGlass() {

@@ -15,9 +15,11 @@ html,body{margin:0;height:100%}
 .intro{
   position:fixed;inset:0;z-index:100;pointer-events:none;
   background:linear-gradient(135deg,#d3e8e3 0%,#badde8 34%,#9db7dc 62%,#c9b6d8 82%,#eccbc1 100%);
-  -webkit-mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 1.5px));
-  mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 1.5px));
-  transition:--hole .62s cubic-bezier(.22,1,.36,1), opacity .22s ease .6s;
+  -webkit-mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 90px));
+  mask-image:radial-gradient(circle at 0 0, transparent 0, transparent var(--hole), #000 calc(var(--hole) + 90px));
+  /* 之前用 .62s + 强缓出，前 20% 的时间就把大半个屏幕扫完了，看起来还是"闪"。
+     改成 1.2s + 两头慢的曲线：圆先在角落慢慢张开，再扫过去，才像一次动画。 */
+  transition:--hole 1.2s cubic-bezier(.62,.04,.28,1), opacity .28s ease 1.18s;
 }
 body.intro-done .intro{--hole:170vmax;opacity:0}
 body.intro-gone .intro{display:none}
