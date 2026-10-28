@@ -184,16 +184,42 @@ function enhanceSelect(id) {
 const refreshSelect = id => { const s = glassSelects.get(id); if (s) s.refresh(); };
 
 /* ============================== 渲染 ============================== */
+/** 站点图标走 MV3 的 _favicon API（manifest 里要 "favicon" 权限）。
+ *  非扩展环境（直接开 html 调试）拿不到，返回空串，退回线性图标。 */
+function faviconURL(url) {
+  try {
+    const rt = globalThis.chrome && chrome.runtime;
+    if (!rt || !rt.getURL) return "";
+    return rt.getURL(`/_favicon/?pageUrl=${encodeURIComponent(url)}&size=32`);
+  } catch { return ""; }
+}
+
+/** 线性图标打底，真 favicon 加载成功后盖在上面；加载失败就把它删掉，露出线性图标。 */
+function tileIconHTML(t) {
+  const src = faviconURL(t.url);
+  if (!src) return icon(t.icon);
+  return `<span class="tile-ico">${icon(t.icon)}<img class="fav" src="${esc(src)}" alt=""></span>`;
+}
+
+function bindFavicons() {
+  document.querySelectorAll("img.fav:not([data-bound])").forEach(img => {
+    img.dataset.bound = "1";
+    img.addEventListener("load", () => img.classList.add("ok"));
+    img.addEventListener("error", () => img.remove());
+  });
+}
+
 function tileHTML(t, zone, project, i) {
   const size = t.size || "s";
   const host = (() => { try { return new URL(t.url).hostname; } catch { return ""; } })();
   const cls = `tile lg-surface ${size}`;
   const kind = size === "s" ? "small" : "panel";
   const attrs = `data-id="${t.id}" data-zone="${zone}" data-proj="${project || ""}" data-glass="${kind}" style="--i:${i}"`;
+  const ico = tileIconHTML(t);
   if (size === "s") {
-    return `<button class="${cls}" ${attrs} type="button">${icon(t.icon)}<span class="t-name">${esc(t.title)}</span></button>`;
+    return `<button class="${cls}" ${attrs} type="button">${ico}<span class="t-name">${esc(t.title)}</span></button>`;
   }
-  return `<button class="${cls}" ${attrs} type="button">${icon(t.icon)}<span class="col"><span class="t-name">${esc(t.title)}</span><span class="t-meta mono">${esc(host)}</span></span></button>`;
+  return `<button class="${cls}" ${attrs} type="button">${ico}<span class="col"><span class="t-name">${esc(t.title)}</span><span class="t-meta mono">${esc(host)}</span></span></button>`;
 }
 
 /* 每个区域记一个"数据指纹"：指纹没变就不重绘。
@@ -211,6 +237,7 @@ function renderPinned(force) {
   if (!force && s === seen.pinned) return;
   seen.pinned = s;
   $("grid-pinned").innerHTML = DB.pinned.map((t, i) => tileHTML(t, "pinned", "", i)).join("");
+  bindFavicons();
 }
 
 function renderProject(force) {
@@ -218,6 +245,7 @@ function renderProject(force) {
   if (!force && s === seen.project) return;
   seen.project = s;
   $("grid-project").innerHTML = currentTiles().map((t, i) => tileHTML(t, "project", DB.currentProject, i)).join("");
+  bindFavicons();
 }
 
 function renderPills(force) {
@@ -283,6 +311,26 @@ function renderAll(force) {
 function openUrl(url, title) {
   if (!url) { toast("没有网址"); return; }
   window.location.href = url;
+}
+
+/** 批量打开一组页面。
+ *  扩展里用 chrome.tabs.create（不需要 tabs 权限），全部后台打开，不打断当前页；
+ *  非扩展环境退回 window.open。 */
+async function openGroup(urls, label) {
+  const list = [...new Set(urls.filter(u => typeof u === "string" && /^https?:\/\//i.test(u)))];
+  if (!list.length) { toast(`${label}还没有页面`); return; }
+  if (list.length > 15) {
+    if (!(await askConfirm(`一次打开 ${list.length} 个标签页？`, "浏览器可能会卡一下。", false))) return;
+  }
+  const tabs = globalThis.chrome && chrome.tabs;
+  if (tabs && tabs.create) {
+    list.forEach(url => {
+      try { tabs.create({ url, active: false }); } catch { /* 单个失败不影响其它 */ }
+    });
+  } else {
+    list.forEach(url => window.open(url, "_blank", "noopener"));
+  }
+  toast(`已打开 ${list.length} 个标签页`);
 }
 
 /* ============================== 时钟 ============================== */
@@ -590,12 +638,19 @@ function bookmarkIcon(url) {
   return "link";
 }
 
-function collectBookmarks(nodes, group, out) {
+/** 分组 = 直接父文件夹。
+ *  坑：chrome.bookmarks.getTree() 的根节点 title 是空字符串，旧写法
+ *  `group || n.title || "未命名"` 在根节点上就落到 "未命名"，之后整棵树都继承它，
+ *  于是所有书签都被归到同一个「未命名」分组。改成只认"有名字的节点"做分组。 */
+function collectBookmarks(nodes, parentTitle, out) {
   for (const n of nodes) {
     if (n.url) {
-      if (/^https?:\/\//i.test(n.url)) out.push({ title: n.title || n.url, url: n.url, group: group || "未分类" });
-    } else if (n.children) {
-      collectBookmarks(n.children, group || n.title || "未命名", out);
+      if (/^https?:\/\//i.test(n.url)) {
+        out.push({ title: n.title || n.url, url: n.url, group: (parentTitle || "").trim() || "未分类" });
+      }
+    } else if (Array.isArray(n.children)) {
+      const own = typeof n.title === "string" ? n.title.trim() : "";
+      collectBookmarks(n.children, own || parentTitle, out);
     }
   }
 }
@@ -1087,8 +1142,8 @@ function bind() {
   });
   $("mCancel").onclick = closeAll;
   $("mOk").onclick = submitAdd;
-  $("openAll").onclick = () => toast(`将打开「${currentProject().name}」的 ${currentTiles().length} 个页面`);
-  $("openAllPinned").onclick = () => toast(`固定区共 ${DB.pinned.length} 个页面`);
+  $("openAll").onclick = () => openGroup(currentTiles().map(t => t.url), `「${currentProject().name}」`);
+  $("openAllPinned").onclick = () => openGroup(DB.pinned.map(t => t.url), "固定区");
   $("reset").onclick = async () => {
     if (!(await askConfirm("重置为空白", "会清空所有页面、项目和归档，恢复成一个空的新标签页。\n建议先「导出布局」备份。", true))) return;
     DB = emptyLayout();
@@ -1109,6 +1164,12 @@ function bind() {
   $("mZone").addEventListener("change", syncGroupField);
   $("archiveBox").onclick = openArchive;
   $("archClose").onclick = closeAll;
+  const themeBtn = $("themeBtn");
+  if (themeBtn) {
+    themeBtn.textContent = isDark() ? "☀" : "☾";
+    themeBtn.title = isDark() ? "切到浅色" : "切到深色";
+    themeBtn.onclick = () => setTheme(!isDark());
+  }
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
       if (askResolve) { askAnswer(null); return; }
@@ -1134,13 +1195,31 @@ if (!aurora) console.warn("[perch] aurora.js 没有加载，背景会退化成�
 const paintAurora = aurora ? aurora.paint : () => {};
 const paintFallback = aurora ? aurora.paintFallback : () => {};
 
-/* 渲染器要一张极光贴图。第一次直接复用已经画好的兜底画布（blit），
-   比重新跑一遍贝塞尔 + 阴影 + 模糊快，能少卡几十毫秒。 */
+/* ============================== 主题 ============================== */
+const THEME_KEY = aurora ? aurora.THEME_KEY : "perch:theme";
+const isDark = () => document.body.classList.contains("dark");
+
+/** 深色 = Lens 的 ocean 场景 + 页面自身的深色版式。
+ *  artwork 回调会收到 scene，据此换调色板，所以切场景会连背景贴图一起换。 */
+function setTheme(dark) {
+  document.body.classList.toggle("dark", dark);
+  const system = window.lensSystem;
+  if (system && system.setScene) system.setScene(dark ? "ocean" : "aurora");
+  const btn = $("themeBtn");
+  if (btn) {
+    btn.textContent = dark ? "☀" : "☾";
+    btn.title = dark ? "切到浅色" : "切到深色";
+  }
+  try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch { /* 存不下也无所谓 */ }
+}
+
+/* 渲染器要一张极光贴图。第一次、且是浅色场景时，直接复用已经画好的兜底画布（blit），
+   比重新跑一遍贝塞尔 + 阴影 + 模糊快，能少卡几十毫秒。深色场景必须重画。 */
 let artworkPrimed = false;
 function artwork(ctx, size) {
-  if (!artworkPrimed && aurora && aurora.blit) {
+  if (!artworkPrimed) {
     artworkPrimed = true;
-    if (aurora.blit(ctx, size)) return;
+    if (aurora && aurora.blit && size.scene !== "ocean" && aurora.blit(ctx, size)) return;
   }
   paintAurora(ctx, size);
 }
@@ -1197,7 +1276,8 @@ function startGlass() {
   let system = null;
   try {
     system = createGlassSystem(stage, {
-      scene: "aurora",
+      // 初始场景就是最终场景，省掉建好之后再切一次（切场景会重画贴图）
+      scene: isDark() ? "ocean" : "aurora",
       artwork,
       material: "thick",
       motion: !matchMedia("(prefers-reduced-motion: reduce)").matches,

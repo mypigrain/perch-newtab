@@ -7,17 +7,40 @@
  *   兜底画布上，于是第一帧就已经是完整背景。
  *
  * 同时把画法挂到 window.PerchAurora 上，供 app.js 交给 WebGL 渲染器当 artwork 复用。
+ * 渲染器回调时会带上 scene（'aurora' / 'ocean'），据此切换配色。
  */
 (function () {
   "use strict";
 
-  const AURORA = ["#d3e8e3", "#badde8", "#9db7dc", "#929ee0", "#d3b4d2", "#eccbc1"];
+  const THEME_KEY = "perch:theme";
 
-  function paint(ctx, { width: w, height: h, dpr }) {
+  const PALETTES = {
+    aurora: {
+      stops: ["#d3e8e3", "#badde8", "#9db7dc", "#929ee0", "#d3b4d2", "#eccbc1"],
+      glow: "rgba(255,255,255,0.33)",
+      shadow: "#38486830",
+      edge: "rgba(255,255,255,0.27)",
+      edge2: "rgba(255,255,255,0.15)"
+    },
+    ocean: {
+      stops: ["#0a1a28", "#12324c", "#1b4a67", "#24607f", "#2f7a96", "#4fa8c0"],
+      glow: "rgba(168,228,255,0.16)",
+      shadow: "#00101866",
+      edge: "rgba(159,224,255,0.20)",
+      edge2: "rgba(159,224,255,0.12)"
+    }
+  };
+
+  const paletteFor = scene => PALETTES[scene === "ocean" ? "ocean" : "aurora"];
+
+  function paint(ctx, { width: w, height: h, dpr, scene }) {
+    const p = paletteFor(scene);
+    const A = p.stops;
+
     const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, AURORA[0]);
-    g.addColorStop(.5, AURORA[1]);
-    g.addColorStop(1, AURORA[5]);
+    g.addColorStop(0, A[0]);
+    g.addColorStop(.5, A[1]);
+    g.addColorStop(1, A[5]);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
@@ -32,9 +55,9 @@
       const f = ctx.createLinearGradient(w * .05, h * .1, w * .87, h * .92);
       f.addColorStop(0, c1);
       f.addColorStop(.48, c2);
-      f.addColorStop(1, AURORA[5]);
+      f.addColorStop(1, A[5]);
       ctx.save();
-      ctx.shadowColor = "#38486830";
+      ctx.shadowColor = p.shadow;
       ctx.shadowBlur = 27 * dpr;
       ctx.shadowOffsetY = -7 * dpr;
       ctx.fillStyle = f;
@@ -43,26 +66,30 @@
       ctx.save();
       ctx.clip(shape);
       ctx.filter = `blur(${15 * dpr}px)`;
-      ctx.strokeStyle = "#ffffff45";
+      ctx.strokeStyle = p.edge;
       ctx.lineWidth = 37 * dpr;
       ctx.stroke(contour);
       ctx.filter = "none";
-      ctx.strokeStyle = "#ffffff25";
+      ctx.strokeStyle = p.edge2;
       ctx.lineWidth = 1.2 * dpr;
       ctx.stroke(contour);
       ctx.restore();
     };
 
-    ribbon(-.31, AURORA[1], AURORA[2]);
-    ribbon(-.10, AURORA[2], AURORA[3]);
-    ribbon(.18, AURORA[3], AURORA[4]);
-    ribbon(.44, AURORA[4], AURORA[5]);
+    ribbon(-.31, A[1], A[2]);
+    ribbon(-.10, A[2], A[3]);
+    ribbon(.18, A[3], A[4]);
+    ribbon(.44, A[4], A[5]);
 
     const glow = ctx.createRadialGradient(w * .12, h * .08, 0, w * .12, h * .08, w * .85);
-    glow.addColorStop(0, "#ffffff55");
-    glow.addColorStop(1, "#ffffff00");
+    glow.addColorStop(0, p.glow);
+    glow.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  function savedDark() {
+    try { return localStorage.getItem(THEME_KEY) === "dark"; } catch { return false; }
   }
 
   /** 把极光画到兜底画布；WebGL 接管后就不必再画了。 */
@@ -79,7 +106,7 @@
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(ctx, { width: w, height: h, dpr });
+    paint(ctx, { width: w, height: h, dpr, scene: savedDark() ? "ocean" : "aurora" });
   }
 
   /** 把已经画好的兜底画布直接 blit 给渲染器，省掉重跑贝塞尔 + 阴影 + 模糊的开销。 */
@@ -94,9 +121,10 @@
     }
   }
 
-  window.PerchAurora = { paint, blit, paintFallback };
+  window.PerchAurora = { paint, blit, paintFallback, paletteFor, savedDark, THEME_KEY };
 
-  // 解析阶段立刻画一次：保证首帧就有背景
+  // 记住的主题要在首帧之前就生效，否则深色用户会先看到一片浅色
+  document.body.classList.toggle("dark", savedDark());
   paintFallback();
   window.addEventListener("resize", paintFallback, { passive: true });
 })();

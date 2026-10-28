@@ -387,3 +387,98 @@ body.is-dragging{cursor:grabbing;user-select:none}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+/* ============================================================
+   顶栏右侧：主题切换
+   ============================================================ */
+.top-right{display:flex;align-items:flex-start;gap:14px;text-align:right}
+.theme-btn{
+  width:36px;height:36px;margin-top:4px;border:0;border-radius:50%;cursor:pointer;
+  display:grid;place-items:center;font-size:15px;color:#3f5573;flex:none;
+  transition:transform .2s var(--lg-ease-spring), color .2s;
+}
+.theme-btn:active{transform:scale(.92)}
+body.dark .theme-btn{color:#bcd8ec}
+
+/* ============================================================
+   站点 favicon（叠在线性图标上，加载失败就退回线性图标）
+   ============================================================ */
+.tile-ico{position:relative;display:grid;place-items:center;width:28px;height:28px;flex:none}
+.tile-ico > .lg-icon{width:26px;height:26px}
+.tile-ico .fav{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+  border-radius:6px;opacity:0;transition:opacity .25s ease;
+}
+.tile-ico .fav.ok{opacity:1}
+
+/* ============================================================
+   深色：Lens 的 ocean 场景 + 页面自身的深色版式
+   ============================================================ */
+body.dark{background:#0b2033;color:#e6f2fb}
+body.dark #stage,
+body.dark .intro{background:linear-gradient(135deg,#0a1a28 0%,#12324c 34%,#1b4a67 62%,#24607f 82%,#4fa8c0 100%)}
+body.dark .intro::after{background:radial-gradient(circle at 38% 38%, rgba(168,228,255,.30), rgba(168,228,255,0) 64%)}
+
+body.dark .brand,body.dark .clock-t{color:#e6f2fb}
+body.dark .brand-en,body.dark .mono,body.dark .clock-d{color:#8fb2c8}
+body.dark .search-ph{color:#c3dcee}
+body.dark .search-k{color:#9fc0d6;background:#ffffff1f}
+body.dark .addbtn,body.dark .minibtn{color:#e6f2fb}
+body.dark .zlabel{color:#a8c8de}
+body.dark .zhint,body.dark .grid:empty::after{color:#7f9fb6}
+
+body.dark .pill{color:#cfe4f2}
+body.dark .pill .n{color:#8fb2c8}
+body.dark .pill.on{color:#a9dcff;outline-color:#7fc4ea80}
+body.dark .pill.ghost{color:#9fc0d6;background:#ffffff14;box-shadow:inset 0 0 0 1px #ffffff26}
+
+body.dark .tile{color:#e6f2fb}
+body.dark .tile .lg-icon{color:#bcd8ec}
+body.dark .t-meta{color:#8fb2c8}
+
+body.dark .sheet-tags span{color:#c3dcee;background:#ffffff1a}
+body.dark .sheet-hint{color:#8fb2c8}
+body.dark .sitem{color:#cfe4f2}
+body.dark .sitem .lg-icon{color:#8fb2c8}
+
+body.dark .foot{color:#7f9fb6}
+body.dark .rst{color:#9fc0d6}
+body.dark .rst:hover{color:#7fc4ea}
+body.dark .ask-empty{color:#7f9fb6}
+
+body.dark .pal-in input{color:#e6f2fb}
+body.dark .pal-in input::placeholder{color:#7f9fb6}
+body.dark .pal-it{color:#dbeaf6}
+body.dark .pal-it .lg-icon{color:#bcd8ec}
+body.dark .pal-it .dd,body.dark .pal-foot,body.dark .pal-empty{color:#8fb2c8}
+
+body.dark .fld>span{color:#9fc0d6}
+body.dark .fld input,
+body.dark .fld select,
+body.dark #askInput{background:#ffffff14;color:#e6f2fb;box-shadow:inset 0 0 0 1px #ffffff26}
+
+body.dark .bm-ghead{background:#12324c;color:#cfe4f2}
+body.dark .bm-item:hover{background:#ffffff14}
+body.dark .bm-t{color:#e6f2fb}
+body.dark .bm-u,body.dark .bm-n,body.dark .bm-extra,body.dark .bm-flabel{color:#8fb2c8}
+body.dark .bm-foot select{background:#ffffff14;color:#e6f2fb;box-shadow:inset 0 0 0 1px #ffffff26}
+body.dark .bm-list input[type=checkbox]{accent-color:#4fb3e8}
+
+body.dark .arch-item{background:#ffffff12}
+body.dark .arch-item .an{color:#e6f2fb}
+body.dark .arch-item .am,body.dark .arch-hint{color:#8fb2c8}
+
+body.dark .cit{color:#dbeaf6}
+body.dark .cit:hover{background:#ffffff14}
+body.dark .gsel-btn,body.dark .gsel-text{color:#e6f2fb}
+body.dark .gsel-chev{color:#8fb2c8}
+body.dark .gsel-pop{background:#12324cf2;box-shadow:0 18px 40px -18px #0009, inset 0 0 0 1px #ffffff26}
+body.dark .gsel-opt{color:#dbeaf6}
+body.dark .gsel-opt:hover{background:#ffffff14}
+body.dark .gsel-opt.on{color:#a9dcff;background:#ffffff1f}
+
+body.dark .toast{background:#12324cf0;color:#e6f2fb}
+
+/* 深色下 WebGL 还没接管时的磨砂兜底 */
+body.dark .lg-surface,
+body.dark .stage.webgl-ready .lg-surface{background:rgba(30,60,86,.5);backdrop-filter:blur(18px) saturate(1.2)}
