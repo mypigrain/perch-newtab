@@ -101,8 +101,11 @@ docs/sample-layout.json  可导入的示例布局
 ## 上游与许可
 
 `vendor/lens/` 是 https://github.com/ruiqichenbiec/design-systems 中
-`lens/lab/design-system/` 的运行时子集，版本 `1.1.0-showcase.1`，MIT 许可，
-详见 `vendor/lens/LICENSE` 与 `vendor/lens/UPSTREAM.md`。
+`lens/lab/design-system/` 的运行时子集，版本 `1.1.0-showcase.1`。
+
+- 本项目代码：[MIT](LICENSE)
+- 第三方 `vendor/lens/`：遵循其自带的 MIT 许可，版权归原作者，见 `vendor/lens/LICENSE`
+  与 `vendor/lens/UPSTREAM.md`
 
 ## 下一步
 
